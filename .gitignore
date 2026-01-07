@@ -1,0 +1,37 @@
+# Backup directories - do not commit actual backups
+backups/
+
+# Logs - contain potentially sensitive paths
+logs/
+*.log
+
+# Machine-specific configurations - may contain local paths
+config/machine-configs/
+config/sources.json
+
+# Temporary files
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE files
+.vscode/.history/
+.idea/
+*.code-workspace
+
+# Node.js / Bun
+node_modules/
+dist/
+bun.lock
+bun.lockb
+
+# pm2
+.pm2/
+pm2-*.log

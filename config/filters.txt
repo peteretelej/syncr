@@ -1,0 +1,60 @@
+# rclone filter rules for _docs backup
+# These rules control which files are included/excluded during sync
+
+# Include all _docs directories and their contents
++ _docs/**
+
+# Exclude common temporary and cache files
+- **/.git/**
+- **/.svn/**
+- **/.hg/**
+- **/node_modules/**
+- **/__pycache__/**
+- **/.pytest_cache/**
+- **/.venv/**
+- **/.env/**
+- **/venv/**
+- **/.vs/**
+- **/.vscode/.history/**
+- **/bin/**
+- **/obj/**
+- **/.idea/**
+- **/temp/**
+- **/tmp/**
+
+# Exclude temporary files
+- *.tmp
+- *.temp
+- *.swp
+- *.swo
+- *~
+- .DS_Store
+- Thumbs.db
+- desktop.ini
+
+# Exclude build artifacts
+- *.pyc
+- *.pyo
+- *.class
+- *.o
+- *.obj
+- *.exe
+- *.dll
+- *.so
+- *.dylib
+
+# Exclude log files (unless explicitly needed)
+- *.log
+
+# Exclude backup files
+- *.bak
+- *.backup
+- *~
+
+# Exclude sensitive/token files
+- **/token.txt
+- **/tokens.txt
+- **/*.token
+
+# Include everything else in _docs
++ **

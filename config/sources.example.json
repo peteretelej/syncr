@@ -1,0 +1,20 @@
+{
+  "machine_name": "DESKTOP-PC",
+  "sources": [
+    {
+      "name": "webapp-docs",
+      "path": "C:\\Users\\Peter\\Projects\\webapp\\docs",
+      "enabled": true
+    },
+    {
+      "name": "api-server-docs",
+      "path": "C:\\Users\\Peter\\Projects\\api-server\\_docs",
+      "enabled": true
+    },
+    {
+      "name": "research",
+      "path": "D:\\Notes\\research",
+      "enabled": false
+    }
+  ]
+}

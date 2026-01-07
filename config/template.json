@@ -1,0 +1,10 @@
+{
+  "machine_name": "YOUR-MACHINE-NAME",
+  "sources": [
+    {
+      "name": "ProjectName",
+      "path": "C:\\Path\\To\\Project\\_docs",
+      "enabled": false
+    }
+  ]
+}
