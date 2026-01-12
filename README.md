@@ -122,10 +122,6 @@ pm2 logs syncr
 
 # Stop
 pm2 stop syncr
-
-# Persist across reboots
-pm2 startup
-pm2 save
 ```
 
 Edit `ecosystem.config.js` to change the schedule:
@@ -133,6 +129,20 @@ Edit `ecosystem.config.js` to change the schedule:
 cron_restart: '0 * * * *'  // Every hour (default)
 cron_restart: '*/30 * * * *'  // Every 30 minutes
 cron_restart: '0 */2 * * *'  // Every 2 hours
+```
+
+### Run as Service (persist across reboots)
+
+**macOS/Linux:**
+```bash
+pm2 startup
+pm2 save
+```
+
+**Windows:** Run PowerShell as Administrator:
+```powershell
+.\scripts\setup-pm2-startup.ps1
+pm2 save
 ```
 
 ## Directory Structure
@@ -146,6 +156,8 @@ syncr/
 |   +-- rclone.ts            # rclone integration
 |   +-- logger.ts            # Logging
 |   +-- types.ts             # TypeScript types
++-- scripts/                 # Setup scripts
+|   +-- setup-pm2-startup.ps1  # Windows service setup
 +-- config/
 |   +-- filters.txt          # Exclusion rules
 |   +-- machine-configs/     # Per-machine configs
