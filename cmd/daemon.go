@@ -1,0 +1,178 @@
+package cmd
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"syscall"
+	"time"
+
+	"github.com/peteretelej/syncr/internal/config"
+	"github.com/peteretelej/syncr/internal/logger"
+	"github.com/peteretelej/syncr/internal/state"
+	"github.com/peteretelej/syncr/internal/sync"
+)
+
+// Daemon runs the continuous sync loop.
+func Daemon(configPath string, verbose bool) {
+	// Load config
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Validate config
+	if err := cfg.Validate(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: invalid config: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Create logger
+	log, err := logger.New(cfg.SyncrDataDir(), verbose)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating logger: %v\n", err)
+		os.Exit(1)
+	}
+	defer log.Close()
+
+	// Load state
+	st, err := state.Load(cfg.SyncrDataDir())
+	if err != nil {
+		log.Error("Failed to load state: %v", err)
+		os.Exit(1)
+	}
+
+	// Write PID file
+	pidFile := filepath.Join(cfg.SyncrDataDir(), "syncr.pid")
+	if err := os.WriteFile(pidFile, []byte(fmt.Sprintf("%d", os.Getpid())), 0644); err != nil {
+		log.Warn("Failed to write PID file: %v", err)
+	}
+	defer os.Remove(pidFile)
+
+	// Calculate sync interval
+	interval := time.Duration(cfg.SyncIntervalSeconds) * time.Second
+
+	// Count enabled projects
+	enabledCount := 0
+	for _, p := range cfg.Projects {
+		if p.Enabled {
+			enabledCount++
+		}
+	}
+
+	log.Info("Starting syncr daemon")
+	log.Info("Sync interval: %v", interval)
+	log.Info("Projects: %d enabled", enabledCount)
+
+	// Set up signal handling
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Create ticker
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	// Run initial sync
+	log.Info("Running initial sync...")
+	runDaemonSync(cfg, st, log)
+
+	// Main loop
+	for {
+		select {
+		case <-ticker.C:
+			log.Info("Running scheduled sync...")
+			runDaemonSync(cfg, st, log)
+
+		case sig := <-sigChan:
+			log.Info("Received %v, shutting down...", sig)
+			return
+		}
+	}
+}
+
+// MaxConsecutiveErrors is the threshold after which we suggest re-initialization.
+const MaxConsecutiveErrors = 5
+
+// runDaemonSync syncs all enabled, initialized projects.
+func runDaemonSync(cfg *config.Config, st *state.State, log *logger.Logger) {
+	ctx := context.Background()
+
+	for _, project := range cfg.Projects {
+		if !project.Enabled {
+			continue
+		}
+
+		if !st.IsInitialized(project.Name) {
+			log.Debug("%s: skipped (not initialized)", project.Name)
+			continue
+		}
+
+		// Check if project has too many consecutive errors
+		ps := st.GetProject(project.Name)
+		if ps.ErrorCount >= MaxConsecutiveErrors {
+			log.Warn("%s: skipped - %d consecutive errors (run: syncr init %s --force)", project.Name, ps.ErrorCount, project.Name)
+			continue
+		}
+
+		cloudPath := filepath.Join(cfg.CloudRoot, project.CloudSubpath)
+
+		// Check paths exist with actionable error messages
+		if !pathExists(project.LocalPath) {
+			log.Warn("%s: local path missing: %s", project.Name, project.LocalPath)
+			log.Warn("  Fix: Ensure the directory exists or update config")
+			st.RecordError(project.Name, fmt.Errorf("local path missing: %s", project.LocalPath))
+			continue
+		}
+
+		if !pathExists(cloudPath) {
+			log.Warn("%s: cloud path missing: %s", project.Name, cloudPath)
+			log.Warn("  Fix: Run 'syncr init %s' to create it", project.Name)
+			st.RecordError(project.Name, fmt.Errorf("cloud path missing: %s", cloudPath))
+			continue
+		}
+
+		start := time.Now()
+
+		opts := sync.BisyncOptions{
+			Resync:       false,
+			DryRun:       false,
+			Verbose:      false,
+			SyncrDataDir: cfg.SyncrDataDir(),
+		}
+
+		_, err := sync.RunBisync(ctx, project.LocalPath, cloudPath, opts)
+		duration := time.Since(start)
+
+		if err != nil {
+			log.Error("%s: sync failed (%v)", project.Name, err)
+			st.RecordError(project.Name, err)
+
+			// Check if this pushes us over the threshold
+			newErrorCount := st.GetProject(project.Name).ErrorCount
+			if newErrorCount >= MaxConsecutiveErrors {
+				log.Warn("  Project has %d consecutive errors", newErrorCount)
+				log.Warn("  Suggestion: Run 'syncr init %s --force' to re-initialize", project.Name)
+			}
+			continue
+		}
+
+		// Check for conflicts
+		conflictCount, _ := sync.CountConflicts(cloudPath)
+
+		if conflictCount > 0 {
+			log.Warn("%s: synced with %d conflict(s) (%v)", project.Name, conflictCount, duration.Round(time.Millisecond))
+			st.RecordConflicts(project.Name, conflictCount)
+		} else {
+			log.Info("%s: synced (%v)", project.Name, duration.Round(time.Millisecond))
+			st.RecordSuccess(project.Name)
+		}
+	}
+
+	// Save state after each sync cycle
+	if err := st.Save(); err != nil {
+		log.Error("Failed to save state: %v", err)
+	}
+}
