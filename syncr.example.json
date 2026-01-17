@@ -1,0 +1,18 @@
+{
+  "cloud_root": "C:\\Users\\You\\OneDrive\\syncr",
+  "sync_interval_seconds": 300,
+  "projects": [
+    {
+      "name": "webapp-docs",
+      "local_path": "C:\\Users\\You\\Projects\\webapp\\docs",
+      "cloud_subpath": "webapp-docs",
+      "enabled": true
+    },
+    {
+      "name": "notes",
+      "local_path": "C:\\Users\\You\\Notes",
+      "cloud_subpath": "notes",
+      "enabled": true
+    }
+  ]
+}
