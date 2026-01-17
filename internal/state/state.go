@@ -19,8 +19,8 @@ type State struct {
 	MachineID string                  `json:"machine_id"`
 	Projects  map[string]ProjectState `json:"projects"`
 
-	path string         // file path (not serialized)
-	mu   sync.RWMutex   // thread safety
+	path string       // file path (not serialized)
+	mu   sync.RWMutex // thread safety
 }
 
 // ProjectState tracks the state of a single project.

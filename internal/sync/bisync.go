@@ -110,13 +110,13 @@ func RunBisync(ctx context.Context, localPath, cloudPath string, opts BisyncOpti
 
 	// Configure bisync options
 	bisyncOpts := &bisync.Options{
-		Workdir:    workdir,
-		MaxDelete:  50, // Safety: abort if >50% would be deleted
-		Resilient:  true,
-		Recover:    true,
-		DryRun:     opts.DryRun,
-		CheckSync:  bisync.CheckSyncTrue,
-		Compare:    bisync.CompareOpt{Size: true, Modtime: true},
+		Workdir:     workdir,
+		MaxDelete:   50, // Safety: abort if >50% would be deleted
+		Resilient:   true,
+		Recover:     true,
+		DryRun:      opts.DryRun,
+		CheckSync:   bisync.CheckSyncTrue,
+		Compare:     bisync.CompareOpt{Size: true, Modtime: true},
 		CompareFlag: "size,modtime",
 	}
 
