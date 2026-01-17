@@ -1,3 +1,5 @@
+// Package logger provides human-friendly logging to stdout and file.
+// Log files are stored in {cloud_root}/_syncr/logs/ with daily rotation.
 package logger
 
 import (

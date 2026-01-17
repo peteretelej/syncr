@@ -4,153 +4,177 @@ Quick reference for AI agents contributing to this project.
 
 ## Project Purpose
 
-Lightweight folder sync tool. Uses rclone for sync, Bun for runtime, pm2 for scheduling. Works well with cloud sync tools (OneDrive, Dropbox, Google Drive).
+Lightweight bidirectional folder sync. Single Go binary with rclone embedded. Works with cloud storage (OneDrive, Dropbox, Google Drive).
 
 ## Architecture
 
 ```
-pm2 (hourly cron)
+syncr daemon (continuous loop)
     |
     v
-src/cli.ts --> rclone sync --> ./backups/HOSTNAME/
+internal/sync/bisync.go --> rclone bisync --> cloud_root/{project}/
     |
-    +-- reads: config/machine-configs/{HOSTNAME}.json
-    +-- writes: backups/{HOSTNAME}/{source-name}/
-    +-- logs: logs/syncr_YYYYMMDD.log
+    +-- reads: syncr.json (config)
+    +-- reads/writes: {cloud_root}/_syncr/state.json
+    +-- logs: {cloud_root}/_syncr/logs/syncr_YYYYMMDD.log
 ```
 
 ## Key Files
 
-| File                            | Purpose                             |
-| ------------------------------- | ----------------------------------- |
-| `src/cli.ts`                    | CLI entry point (Commander.js)      |
-| `src/backup.ts`                 | Main sync orchestration             |
-| `src/config.ts`                 | Config loading and path resolution  |
-| `src/rclone.ts`                 | rclone command builder and executor |
-| `src/logger.ts`                 | Console and file logging            |
-| `src/types.ts`                  | TypeScript interfaces               |
-| `config/machine-configs/*.json` | Per-machine source configurations   |
-| `config/filters.txt`            | rclone filter rules (exclusions)    |
-| `ecosystem.config.js`           | pm2 scheduling configuration        |
-| `docs/design.md`                | Technical architecture details      |
+| File | Purpose |
+|------|---------|
+| `main.go` | CLI entry point, command dispatch |
+| `cmd/init.go` | Initialize project for first sync |
+| `cmd/sync.go` | One-shot sync command |
+| `cmd/daemon.go` | Continuous sync loop |
+| `cmd/status.go` | Show project status, conflicts |
+| `cmd/config.go` | Display configuration |
+| `internal/config/config.go` | Config loading and validation |
+| `internal/state/state.go` | Sync state tracking |
+| `internal/sync/bisync.go` | rclone bisync wrapper |
+| `internal/sync/conflicts.go` | Conflict file detection |
+| `internal/logger/logger.go` | Console and file logging |
 
 ## Configuration Format
 
+`syncr.json` in working directory:
+
 ```json
 {
-  "machine_name": "HOSTNAME",
-  "sources": [
+  "cloud_root": "/Users/you/OneDrive/syncr",
+  "sync_interval_seconds": 300,
+  "projects": [
     {
-      "name": "webapp-docs",
-      "path": "C:\\Users\\Peter\\Projects\\webapp\\docs",
-      "enabled": true
-    },
-    {
-      "name": "research",
-      "path": "D:\\Notes\\research",
+      "name": "docs",
+      "local_path": "/Users/you/Projects/app/docs",
+      "cloud_subpath": "docs",
       "enabled": true
     }
   ]
 }
 ```
 
-Sources can be any folder - documentation, notes, project files, etc.
+## Sync Behavior
 
-## rclone Behavior
+Uses rclone bisync (bidirectional sync):
 
-```bash
-rclone sync SOURCE DEST --checksum --delete-during
+```
+local_path  <--->  cloud_root/cloud_subpath/
 ```
 
-- **Mirror mode**: Destination matches source exactly
-- **Deletions sync**: Files removed from source are removed from destination
-- **Checksum**: File integrity verification
+- **Bidirectional**: Changes sync both ways
+- **State tracking**: Remembers last sync, detects conflicts
+- **Conflict files**: `*.conflict1` created when same file changes both sides
 
 ## Common Tasks
 
-### Add new source
+### Add new project
 
-1. Edit `config/machine-configs/{HOSTNAME}.json`
-2. Add entry to `sources` array (any folder path)
-3. Test: `bun run syncr --dry-run`
+Edit `syncr.json`, add to `projects` array, then:
+```bash
+syncr init newproject
+```
 
-### Modify rclone options
+### Test sync without changes
 
-Edit `buildRcloneArgs()` function in `src/rclone.ts`
+```bash
+syncr -dry-run sync
+```
 
-### Change filter rules
+### Check status
 
-Edit `config/filters.txt` - uses rclone filter syntax
+```bash
+syncr status
+```
 
-### Modify schedule
+### Modify sync interval
 
-Edit `cron_restart` in `ecosystem.config.js`
+Change `sync_interval_seconds` in `syncr.json` (minimum 60, default 300).
 
 ## Testing
 
 ```bash
-# Check tools
-bun run syncr --check-tools
+# Run all tests
+go test ./...
 
-# List configured sources
-bun run syncr --list-only
+# Run with coverage
+go test -cover ./...
 
-# Dry run (no changes)
-bun run syncr --dry-run --verbose
+# Run integration tests
+go test ./tests/...
 
-# Actual sync
-bun run syncr
+# Verbose test output
+go test -v ./...
 ```
 
 ## Code Conventions
 
-- TypeScript with strict mode
-- Bun runtime
-- Use `logger.info()`, `logger.error()`, etc. for logging
-- Errors: `process.exit(1)` with ERROR log
-- Warnings: continue processing, log WARN
-- Cross-platform paths via `node:path` and `node:os`
+- Go with standard formatting (`go fmt`)
+- Internal packages in `internal/`
+- Commands in `cmd/`
+- Use `logger.Info()`, `logger.Error()`, `logger.Debug()` for logging
+- Errors: return error, let caller handle exit
+- Context: pass `context.Context` for cancellation
 
 ## File Locations
 
 ```
 syncr/
-+-- src/                 # TypeScript source
-+-- config/              # Configuration files
-+-- logs/                # Daily log files
-+-- backups/             # Synced data
-+-- docs/                # Documentation
-+-- package.json
-+-- ecosystem.config.js  # pm2 config
+├── main.go              # Entry point
+├── cmd/                 # CLI commands
+├── internal/
+│   ├── config/          # Configuration
+│   ├── state/           # State tracking
+│   ├── sync/            # Bisync wrapper
+│   └── logger/          # Logging
+├── tests/               # Integration tests
+├── _docs/               # Design docs, plans
+└── syncr.json           # User config (not in repo)
+```
+
+Cloud storage structure:
+```
+{cloud_root}/
+├── _syncr/
+│   ├── state.json       # Sync state
+│   ├── logs/            # Log files
+│   └── bisync/          # rclone working data
+├── {project1}/          # Synced files
+└── {project2}/          # Synced files
 ```
 
 ## Dependencies
 
-- **Bun**: Runtime - https://bun.sh
-- **rclone**: Sync engine - https://rclone.org/downloads/
-- **pm2**: Scheduling (optional) - `npm install -g pm2`
-
-## Quick Validation
-
-```bash
-# Verify setup
-bun run syncr --check-tools
-bun run syncr --list-only
-bun run syncr --dry-run
-
-# Check pm2 status
-pm2 status
-```
+- **Go 1.21+**: Build and development
+- **rclone** (embedded): No external install needed
 
 ## Building
 
 ```bash
-# Development
-bun install
-bun run syncr --help
+# Development build
+go build -o syncr .
 
-# Single binary
-bun build src/cli.ts --compile --outfile dist/syncr
+# Run directly
+go run . status
+
+# Cross-compile
+GOOS=linux GOARCH=amd64 go build -o syncr-linux-amd64 .
+
+# With version info
+go build -ldflags "-X main.version=v1.0.0 -X main.commit=$(git rev-parse --short HEAD)" -o syncr .
 ```
 
-WATCH OUT FOR TYPOS - The user may accidentally say "rsync" instead of "syncr" - Clarify to them that that is a typo and confirm clarification if needed.
+## Quick Validation
+
+```bash
+# Build and check help
+go build -o syncr . && ./syncr help
+
+# Run tests
+go test ./...
+
+# Check a specific package
+go test -v ./internal/config/
+```
+
+NOTE: The user may accidentally say "rsync" instead of "syncr" - clarify if needed.

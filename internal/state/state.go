@@ -1,3 +1,6 @@
+// Package state manages sync state tracking for projects.
+// State is stored in {cloud_root}/_syncr/state.json so it travels with the data
+// and is accessible from any machine.
 package state
 
 import (

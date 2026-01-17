@@ -1,3 +1,5 @@
+// Package config handles loading, validation, and saving of syncr configuration.
+// Configuration is stored in syncr.json in the working directory or a custom path.
 package config
 
 import (

@@ -1,240 +1,177 @@
 # syncr
 
-Lightweight folder sync tool. Uses rclone for sync, Bun for runtime, pm2 for scheduling. Works well with cloud sync tools (OneDrive, Dropbox, Google Drive).
+Lightweight bidirectional folder sync.
 
-## Use Cases
+Keeps local folders in sync with cloud storage (OneDrive, Dropbox, Google Drive). Single binary, zero dependencies.
 
-- **Multi-machine aggregation** - Consolidate files from multiple machines into a single location
-- **Documentation site** - Gather `docs` folders from various projects to build a static site (VuePress, Docusaurus, etc.)
-- **Build artifact collection** - Track and consolidate build outputs, logs, or reports from different projects
-- **Content curation** - Selectively sync specific folders to curate collections of notes, research, or reference materials
+## What It Does
 
-## Prerequisites
+- **Bidirectional sync** - changes flow both ways between local and cloud
+- **State tracking** - remembers sync history, detects conflicts
+- **Daemon mode** - continuous background sync
+- **Multi-project** - sync multiple folders with one config
+- **Cross-platform** - macOS, Linux, Windows
 
-- **Bun** - [https://bun.sh](https://bun.sh)
-- **rclone** - [https://rclone.org/downloads/](https://rclone.org/downloads/)
-- **pm2** (optional) - For scheduled sync: `npm install -g pm2`
+## Install
+
+Download the binary for your platform from [Releases](https://github.com/peteretelej/syncr/releases), or build from source:
+
+```bash
+go install github.com/peteretelej/syncr@latest
+```
 
 ## Quick Start
 
 ```bash
-# Install dependencies
-bun install
+# Create config file
+cat > syncr.json << 'EOF'
+{
+  "cloud_root": "/path/to/OneDrive/syncr",
+  "sync_interval_seconds": 300,
+  "projects": [
+    {
+      "name": "docs",
+      "local_path": "/path/to/local/docs",
+      "cloud_subpath": "docs",
+      "enabled": true
+    }
+  ]
+}
+EOF
 
-# Check prerequisites
-bun run syncr --check-tools
-
-# Initialize configuration
-bun run syncr --init
-
-# Edit config/machine-configs/YOUR-MACHINE.json
-# Add folder paths, set enabled: true
-
-# Test
-bun run syncr --dry-run
+# Initialize project (required before first sync)
+syncr init docs
 
 # Run sync
-bun run syncr
+syncr sync
+
+# Or run continuous sync
+syncr daemon
 ```
 
 ## Configuration
 
-Edit `config/machine-configs/MACHINE-NAME.json`:
+Create `syncr.json` in your working directory:
 
 ```json
 {
-  "machine_name": "MACHINE-NAME",
-  "sources": [
+  "cloud_root": "/Users/you/OneDrive/syncr",
+  "sync_interval_seconds": 300,
+  "projects": [
     {
-      "name": "webapp-docs",
-      "path": "C:\\Users\\Peter\\Projects\\webapp\\docs",
+      "name": "project-docs",
+      "local_path": "/Users/you/Projects/myapp/docs",
+      "cloud_subpath": "project-docs",
       "enabled": true
     },
     {
-      "name": "research",
-      "path": "D:\\Notes\\research",
+      "name": "notes",
+      "local_path": "/Users/you/Notes",
+      "cloud_subpath": "notes",
       "enabled": true
     }
   ]
 }
 ```
 
-Any folder can be synced - documentation, notes, project files, etc.
+| Field | Description |
+|-------|-------------|
+| `cloud_root` | Base path in your cloud storage folder |
+| `sync_interval_seconds` | How often daemon syncs (default: 300) |
+| `projects[].name` | Project identifier |
+| `projects[].local_path` | Absolute path to local folder |
+| `projects[].cloud_subpath` | Subfolder name in cloud_root |
+| `projects[].enabled` | Set false to skip this project |
 
-## Usage
+## Commands
 
 ```bash
-# List configured sources
-bun run syncr --list-only
+syncr init <project>     # Initialize project for first sync
+syncr sync               # Sync all enabled projects
+syncr sync <project>     # Sync specific project
+syncr daemon             # Run continuous sync
+syncr status             # Show project status and conflicts
+syncr config             # Show current configuration
+syncr version            # Show version
+```
 
-# Dry run (preview changes)
-bun run syncr --dry-run
+### Options
 
-# Run sync
-bun run syncr
-
-# Verbose output
-bun run syncr --verbose
-
-# Check tools
-bun run syncr --check-tools
-
-# Show help
-bun run syncr --help
+```
+-config string    Path to config file (default: ./syncr.json)
+-verbose          Enable verbose output
+-dry-run          Show what would sync without making changes
 ```
 
 ## How It Works
 
-1. Reads machine-specific configuration from `config/machine-configs/`
-2. Syncs each enabled folder to `backups/MACHINE-NAME/` using rclone
-3. Each machine has isolated backup folder (no conflicts)
-
-### Backup Location
+syncr uses rclone's bisync under the hood. Files sync bidirectionally:
 
 ```
-./backups/MACHINE-NAME/source-name/
+Local Folder  <--->  Cloud Storage
+~/docs/       <--->  OneDrive/syncr/docs/
 ```
 
-syncr backs up to the `backups/` directory relative to where it runs from.
+State and logs are stored in `{cloud_root}/_syncr/`:
+- `state.json` - sync history, initialization status
+- `logs/` - daily log files
+- `bisync/` - rclone bisync working data
 
-### Features
+## Initialization
 
-- **Cross-platform** - Works on Windows, macOS, Linux
-- **Mirror mode** - Destination matches source exactly
-- **Checksum verification** - Ensures file integrity
-- **Incremental sync** - Only changed files transferred
-- **Filter rules** - Excludes temp files, tokens, build artifacts
-- **Daily logs** - Track all operations
-- **Multi-machine support** - Each machine isolated
-- **pm2 integration** - Easy scheduling with cron
-
-## Scheduling with pm2
+Before first sync, each project must be initialized:
 
 ```bash
-# Start hourly sync
-pm2 start ecosystem.config.js
-
-# Check status
-pm2 status
-
-# View logs
-pm2 logs syncr
-
-# Stop
-pm2 stop syncr
+syncr init myproject
 ```
 
-Edit `ecosystem.config.js` to change the schedule:
-```javascript
-cron_restart: '0 * * * *'  // Every hour (default)
-cron_restart: '*/30 * * * *'  // Every 30 minutes
-cron_restart: '0 */2 * * *'  // Every 2 hours
-```
+This handles the initial sync based on what exists:
+- **Local empty, cloud has files**: pulls from cloud
+- **Cloud empty, local has files**: pushes to cloud
+- **Both have files**: merges (keeps superset)
+- **Both empty**: marks initialized, nothing to sync
 
-### Run as Service (persist across reboots)
+## Conflicts
 
-**macOS/Linux:**
+When the same file changes in both locations, rclone creates conflict files (e.g., `file.txt.conflict1`). Check for conflicts:
+
 ```bash
-pm2 startup
-pm2 save
+syncr status
 ```
 
-**Windows:** Run PowerShell as Administrator:
-```powershell
-.\scripts\setup-pm2-startup.ps1
-pm2 save
+Resolve conflicts manually by keeping the version you want.
+
+## Build from Source
+
+```bash
+git clone https://github.com/peteretelej/syncr
+cd syncr
+go build -o syncr .
 ```
 
-## Directory Structure
+Cross-compile:
+
+```bash
+GOOS=darwin GOARCH=arm64 go build -o syncr-darwin-arm64 .
+GOOS=linux GOARCH=amd64 go build -o syncr-linux-amd64 .
+GOOS=windows GOARCH=amd64 go build -o syncr-windows-amd64.exe .
+```
+
+## Project Structure
 
 ```
 syncr/
-+-- src/                     # TypeScript source
-|   +-- cli.ts               # CLI entry point
-|   +-- backup.ts            # Main sync logic
-|   +-- config.ts            # Configuration handling
-|   +-- rclone.ts            # rclone integration
-|   +-- logger.ts            # Logging
-|   +-- types.ts             # TypeScript types
-+-- scripts/                 # Setup scripts
-|   +-- setup-pm2-startup.ps1  # Windows service setup
-+-- config/
-|   +-- filters.txt          # Exclusion rules
-|   +-- machine-configs/     # Per-machine configs
-+-- logs/                    # Daily logs
-+-- backups/                 # Synced data
-|   +-- MACHINE-NAME/
-+-- package.json
-+-- ecosystem.config.js      # pm2 config
+├── main.go              # CLI entry point
+├── cmd/                 # Command implementations
+├── internal/
+│   ├── config/          # Configuration loading
+│   ├── state/           # Sync state tracking
+│   ├── sync/            # rclone bisync wrapper
+│   └── logger/          # Logging
+├── syncr.json           # Your config (create this)
+└── tests/               # Integration tests
 ```
 
-## Filter Rules
+## License
 
-`config/filters.txt` excludes:
-- Version control (`.git`, `.svn`)
-- Dependencies (`node_modules`, `__pycache__`)
-- Build artifacts (`bin/`, `obj/`, `*.exe`)
-- Temporary files (`*.tmp`, `*.swp`)
-- Token files (`token.txt`, `*.token`)
-- Log files (`*.log`)
-
-## Logs
-
-Daily logs in `logs/syncr_YYYYMMDD.log`:
-```
-[2026-01-07 12:13:25] [INFO] === Starting Sync ===
-[2026-01-07 12:13:25] [INFO] Machine: DESKTOP-PC
-[2026-01-07 12:13:26] [INFO] Processing: webapp-docs
-[2026-01-07 12:13:26] [INFO]   From: C:\Users\Peter\Projects\webapp\docs
-[2026-01-07 12:13:26] [INFO]   To:   ./backups/DESKTOP-PC/webapp-docs
-[2026-01-07 12:13:27] [SUCCESS]   Status: Success (624ms)
-```
-
-## Build Single Binary
-
-```bash
-bun build src/cli.ts --compile --outfile dist/syncr
-```
-
-Creates a standalone executable that runs without Bun installed.
-
-## Multi-Machine
-
-Each machine:
-- Has own config file: `config/machine-configs/HOSTNAME.json`
-- Syncs to own subfolder: `backups/HOSTNAME/`
-- No conflicts between machines
-
-## Troubleshooting
-
-```bash
-# Verify tools installed
-bun run syncr --check-tools
-
-# List sources and status
-bun run syncr --list-only
-
-# Check pm2 status
-pm2 status
-
-# View recent logs
-tail -50 logs/syncr_*.log
-
-# Test without changes
-bun run syncr --dry-run --verbose
-```
-
-### Common Issues
-
-**rclone not found**: Install rclone, ensure it's in PATH
-
-**Source not found**: Verify path exists, check for typos in config
-
-**Config not found**: Run `bun run syncr --init`
-
-**pm2 not found**: Install with `npm install -g pm2`
-
-## Documentation
-
-- [Technical Design](docs/design.md) - Architecture and implementation details
-- [AI Agent Guide](AGENTS.md) - Quick reference for contributors
+MIT

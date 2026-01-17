@@ -2,384 +2,343 @@
 
 ## Overview
 
-Lightweight folder sync tool. Uses rclone for sync, Bun for runtime, pm2 for scheduling. Works well with cloud sync tools (OneDrive, Dropbox, Google Drive).
+Lightweight bidirectional folder sync. Single Go binary with rclone embedded. Works with cloud storage (OneDrive, Dropbox, Google Drive).
 
 ## Architecture
 
 ```
 +---------------------+
-|  pm2 (scheduler)    |
-|  cron: 0 * * * *    |
+|  syncr daemon       |
+|  (continuous loop)  |
 +----------+----------+
            |
            v
 +---------------------+
-|  Bun Runtime        |
-|  src/cli.ts         |
+|  internal/sync      |
+|  bisync.go          |
 +----------+----------+
            |
-           v
-+---------------------+
-|  Backup Module      |
-|  src/backup.ts      |
-+----------+----------+
+           +---> Config (syncr.json)
            |
-           +---> Config (JSON)
+           +---> State ({cloud_root}/_syncr/state.json)
            |
-           +---> rclone (sync engine)
+           +---> rclone bisync (embedded library)
            |
-           +---> ./backups/HOSTNAME/
+           +---> {cloud_root}/{project}/
 ```
 
 ## Data Flow
 
 ```
-Source Folders (any path)
-    |
-    +-> C:\Users\Peter\Projects\webapp\docs
-    +-> C:\Users\Peter\Projects\api-server\_docs
-    +-> D:\Notes\research
+Local Folders                Cloud Storage
+    |                            |
+    +-> ~/Projects/app/docs      |
+    +-> ~/Notes/research    <--> +-> OneDrive/syncr/docs/
+                                 +-> OneDrive/syncr/research/
          |
-         +---> [rclone sync --checksum --delete-during]
+         +---> [rclone bisync - bidirectional]
          |
-         +---> ./backups/MACHINE-NAME/
-                  |
-                  +-> webapp-docs/
-                  +-> api-server-docs/
-                  +-> research/
+         +---> State tracked in _syncr/state.json
 ```
 
 ## Directory Structure
 
+### Source Code
+
 ```
 syncr/
-+-- src/
-|   +-- cli.ts           # CLI entry point (Commander.js)
-|   +-- backup.ts        # Main sync orchestration
-|   +-- config.ts        # Config loading and path resolution
-|   +-- rclone.ts        # rclone command builder and executor
-|   +-- logger.ts        # Console and file logging
-|   +-- types.ts         # TypeScript interfaces
-+-- config/
-|   +-- filters.txt      # rclone filter rules
-|   +-- template.json    # Config template
-|   +-- machine-configs/
-|       +-- HOSTNAME.json  # Per-machine source list
-+-- logs/
-|   +-- syncr_YYYYMMDD.log  # Daily operation logs
-+-- backups/
-|   +-- MACHINE-NAME/
-|       +-- PROJECT-NAME/    # Actual synced data
-+-- package.json
-+-- tsconfig.json
-+-- ecosystem.config.js   # pm2 configuration
+├── main.go                  # CLI entry point, command dispatch
+├── cmd/
+│   ├── init.go              # Initialize project
+│   ├── sync.go              # One-shot sync
+│   ├── daemon.go            # Continuous sync loop
+│   ├── status.go            # Show status and conflicts
+│   ├── config.go            # Display configuration
+│   └── version.go           # Version info
+├── internal/
+│   ├── config/
+│   │   ├── config.go        # Config loading and validation
+│   │   └── config_test.go
+│   ├── state/
+│   │   ├── state.go         # Sync state management
+│   │   └── state_test.go
+│   ├── sync/
+│   │   ├── bisync.go        # rclone bisync wrapper
+│   │   ├── conflicts.go     # Conflict detection
+│   │   └── *_test.go
+│   └── logger/
+│       ├── logger.go        # Console and file logging
+│       └── logger_test.go
+├── tests/                   # Integration tests
+├── go.mod
+└── go.sum
 ```
 
-## Source Code Modules
+### Runtime Locations
 
-### cli.ts
-
-Entry point using Commander.js for argument parsing.
-
-```typescript
-// CLI flags
---dry-run      // Preview changes without copying
---verbose      // Show detailed output
---list-only    // List configured sources
---init         // Create initial config
---check-tools  // Verify rclone installed
+User config (not in repo):
+```
+./syncr.json                 # Working directory
 ```
 
-### backup.ts
-
-Main orchestration module:
-
-1. Validates prerequisites (rclone, backup root)
-2. Loads machine-specific configuration
-3. Iterates through enabled sources
-4. Executes rclone sync for each source
-5. Logs results and summary
-
-### config.ts
-
-Configuration handling:
-
-- Determines backup root path (current working directory)
-- Loads and validates JSON config files
-- Creates initial config with `--init` flag
-- Resolves machine-specific config by hostname
-
-### rclone.ts
-
-rclone integration:
-
-- Checks if rclone is installed
-- Builds sync command with appropriate flags
-- Executes rclone as child process
-- Handles output and errors
-
-Command construction:
+Cloud storage:
 ```
-rclone sync SOURCE DEST \
-  --checksum \
-  --delete-during \
-  --filter-from filters.txt \
-  [--dry-run] \
-  [--verbose --progress]
+{cloud_root}/
+├── _syncr/
+│   ├── state.json           # Sync state (travels with data)
+│   ├── logs/
+│   │   └── syncr_YYYYMMDD.log
+│   └── bisync/              # rclone working data
+├── {project1}/              # Synced files
+└── {project2}/              # Synced files
 ```
 
-### logger.ts
+## Package Design
 
-Logging with console and file output:
+### main.go
 
-- Color-coded console output (INFO, SUCCESS, WARN, ERROR)
-- Daily log files: `syncr_YYYYMMDD.log`
-- Timestamp format: `[YYYY-MM-DD HH:MM:SS]`
+Entry point with flag parsing and command dispatch.
 
-### types.ts
+```go
+// Global flags
+-config string    // Path to config file
+-verbose          // Enable verbose output
+-dry-run          // Preview without changes
 
-TypeScript interfaces:
+// Commands
+init <project>    // Initialize for first sync
+sync [project]    // One-shot sync
+daemon            // Continuous sync
+status            // Show status
+config            // Show configuration
+version           // Show version
+```
 
-```typescript
-interface BackupSource {
-  name: string;
-  path: string;
-  enabled: boolean;
+### internal/config
+
+Configuration loading and validation.
+
+```go
+type Config struct {
+    CloudRoot           string    `json:"cloud_root"`
+    SyncIntervalSeconds int       `json:"sync_interval_seconds"`
+    Projects            []Project `json:"projects"`
 }
 
-interface MachineConfig {
-  machine_name: string;
-  sources: BackupSource[];
+type Project struct {
+    Name         string `json:"name"`
+    LocalPath    string `json:"local_path"`
+    CloudSubpath string `json:"cloud_subpath"`
+    Enabled      bool   `json:"enabled"`
+}
+```
+
+Responsibilities:
+- Load from `syncr.json` or `-config` path
+- Validate paths exist and are absolute
+- Apply defaults (sync interval = 300s)
+- Compute `SyncrDataDir()` as `{cloud_root}/_syncr`
+
+### internal/state
+
+Sync state tracking. State file lives in cloud storage so it's shared across machines.
+
+```go
+type State struct {
+    Version   int                     `json:"version"`
+    MachineID string                  `json:"machine_id"`
+    Projects  map[string]ProjectState `json:"projects"`
 }
 
-interface BackupResult {
-  source: BackupSource;
-  success: boolean;
-  error?: string;
-  duration?: number;
+type ProjectState struct {
+    Initialized    bool      `json:"initialized"`
+    InitializedAt  time.Time `json:"initialized_at,omitempty"`
+    LastSync       time.Time `json:"last_sync,omitempty"`
+    LastSyncStatus string    `json:"last_sync_status,omitempty"`
+    SyncCount      int       `json:"sync_count"`
+    ErrorCount     int       `json:"error_count"`
+    LastError      string    `json:"last_error,omitempty"`
 }
+```
+
+Responsibilities:
+- Load/save state with atomic writes
+- Track initialization status per project
+- Record sync success/failure
+- Thread-safe via mutex
+
+### internal/sync
+
+rclone bisync wrapper.
+
+```go
+type BisyncOptions struct {
+    Resync       bool
+    ResyncMode   string // "path1", "path2", or ""
+    DryRun       bool
+    Verbose      bool
+    SyncrDataDir string
+}
+
+type BisyncResult struct {
+    Transferred int
+    Deleted     int
+    Errors      int
+    Duration    time.Duration
+}
+
+func RunBisync(ctx context.Context, localPath, cloudPath string, opts BisyncOptions) (*BisyncResult, error)
+```
+
+Bisync options applied:
+- `--compare size,modtime`
+- `--max-delete 50%`
+- `--resilient`
+- `--recover`
+- `--workdir {syncrDataDir}/bisync`
+
+Conflict detection:
+```go
+func CountConflicts(path string) (int, error)
+func ListConflicts(path string) ([]string, error)
+```
+
+### internal/logger
+
+Logging with console and file output.
+
+```go
+type Logger struct {
+    out     io.Writer
+    file    *os.File
+    verbose bool
+}
+
+func (l *Logger) Info(format string, args ...interface{})
+func (l *Logger) Warn(format string, args ...interface{})
+func (l *Logger) Error(format string, args ...interface{})
+func (l *Logger) Debug(format string, args ...interface{})  // verbose only
+```
+
+Log file: `{syncrDataDir}/logs/syncr_YYYYMMDD.log`
+
+Format:
+```
+[2026-01-17 10:30:00] [INFO] Message here
 ```
 
 ## Configuration Schema
 
 ```json
 {
-  "machine_name": "HOSTNAME",
-  "sources": [
+  "cloud_root": "/Users/you/OneDrive/syncr",
+  "sync_interval_seconds": 300,
+  "projects": [
     {
-      "name": "ProjectName",
-      "path": "C:\\Path\\To\\Folder",
+      "name": "docs",
+      "local_path": "/Users/you/Projects/app/docs",
+      "cloud_subpath": "docs",
       "enabled": true
     }
   ]
 }
 ```
 
-Fields:
-- **machine_name**: Hostname identifier (auto-detected)
-- **sources**: Array of backup sources
-  - **name**: Project identifier (used in backup path)
-  - **path**: Absolute path to folder
-  - **enabled**: Boolean flag for active/inactive
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `cloud_root` | string | required | Base path in cloud storage |
+| `sync_interval_seconds` | int | 300 | Daemon sync interval (min 60) |
+| `projects` | array | required | List of projects to sync |
+| `projects[].name` | string | required | Project identifier |
+| `projects[].local_path` | string | required | Absolute local path |
+| `projects[].cloud_subpath` | string | required | Subfolder in cloud_root |
+| `projects[].enabled` | bool | true | Include in sync |
 
-## rclone Configuration
+## Initialization
 
-### Sync Options
+Before first sync, projects must be initialized. The init command handles different starting states:
 
+| Local | Cloud | Action |
+|-------|-------|--------|
+| Empty | Has files | Resync with `--resync-mode path2` (cloud wins) |
+| Has files | Empty | Resync with `--resync-mode path1` (local wins) |
+| Empty | Empty | Mark initialized, nothing to sync |
+| Has files | Has files | Resync (keeps superset of both) |
+
+## Daemon Mode
+
+Continuous sync loop:
+1. Initial sync on startup
+2. Wait for `sync_interval_seconds`
+3. Sync all enabled, initialized projects
+4. Handle SIGINT/SIGTERM for graceful shutdown
+5. Write PID file to `_syncr/syncr.pid`
+
+Error handling:
+- Skip uninitialized projects
+- Skip projects that hit max consecutive errors (5)
+- Suggest `syncr init --force` after error threshold
+
+## Conflict Handling
+
+rclone bisync creates conflict files when the same file changes in both locations:
 ```
-rclone sync SOURCE DEST \
-  --checksum           # Verify via checksums
-  --delete-during      # Delete dest files not in source
-  --filter-from FILE   # Apply exclusion rules
-```
-
-**Mirror Mode**: Destination becomes exact copy of source. Files deleted from source are deleted from destination.
-
-### Filter Rules
-
-Located in `config/filters.txt`:
-
-```
-# Exclude version control
-- **/.git/**
-- **/.svn/**
-
-# Exclude dependencies
-- **/node_modules/**
-- **/__pycache__/**
-
-# Exclude sensitive files
-- **/token.txt
-- **/tokens.txt
-- **/*.token
-
-# Exclude temp files
-- *.tmp
-- *.log
-
-# Include everything else
-+ **
+file.txt.conflict1
+file.txt.conflict2
 ```
 
-## Scheduling with pm2
-
-### ecosystem.config.js
-
-```javascript
-module.exports = {
-  apps: [{
-    name: 'syncr',
-    script: 'src/cli.ts',
-    interpreter: 'bun',
-    cron_restart: '0 * * * *',  // Hourly
-    autorestart: false,
-    log_date_format: 'YYYY-MM-DD HH:mm:ss',
-    error_file: 'logs/pm2-error.log',
-    out_file: 'logs/pm2-out.log',
-  }]
-};
-```
-
-### pm2 Commands
-
-```bash
-pm2 start ecosystem.config.js   # Start
-pm2 status                      # Check status
-pm2 logs syncr                  # View logs
-pm2 stop syncr                  # Stop
-pm2 startup && pm2 save         # Persist across reboots
-```
-
-## Multi-Machine Strategy
-
-### Isolation
-
-Each machine syncs to its own subfolder:
-```
-backups/MACHINE1/ProjectA/
-backups/MACHINE2/ProjectA/
-```
-
-Prevents:
-- Cross-machine file conflicts
-- Accidental overwrites
-- Version inconsistencies
+The `status` command counts and lists conflicts. Resolution is manual - user keeps the version they want and deletes conflict files.
 
 ## Error Handling
 
 | Error | Behavior |
 |-------|----------|
-| Missing source path | WARN log, continue processing |
-| rclone failure | ERROR log, continue processing |
-| Missing rclone | ERROR log, exit code 1 |
-| Invalid config | ERROR log, exit code 1 |
-
-Exit codes:
-- 0: Success
-- 1: Fatal error (missing tools, invalid config, sync failures)
-
-## Logging
-
-### Format
-
-```
-[YYYY-MM-DD HH:MM:SS] [LEVEL] Message
-```
-
-### Levels
-
-- **INFO**: Normal operations
-- **SUCCESS**: Successful completions
-- **WARN**: Non-fatal issues
-- **ERROR**: Fatal errors
-
-### Files
-
-- Console: Color-coded output
-- File: `logs/syncr_YYYYMMDD.log`
-
-## Performance
-
-- Checksum-based change detection
-- Only modified files transferred
-- Parallel file operations (rclone default)
-- Incremental sync in seconds to minutes
+| Config not found | Exit with error message |
+| Invalid config | Exit with validation errors |
+| Missing local path | Skip project, log warning |
+| Missing cloud path | Create directory |
+| Bisync failure | Log error, continue to next project |
+| Max errors hit | Skip project, suggest re-init |
 
 ## Building
 
 ### Development
 
 ```bash
-bun install
-bun run syncr --help
+go build -o syncr .
+go test ./...
 ```
 
-### Single Binary
+### Release
 
 ```bash
-bun build src/cli.ts --compile --outfile dist/syncr
+VERSION=$(git describe --tags --always)
+COMMIT=$(git rev-parse --short HEAD)
+LDFLAGS="-X main.version=$VERSION -X main.commit=$COMMIT"
+
+go build -ldflags "$LDFLAGS" -o syncr .
 ```
 
-Creates standalone executable without runtime dependency.
+### Cross-Compile
+
+```bash
+GOOS=darwin GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/syncr-darwin-amd64 .
+GOOS=darwin GOARCH=arm64 go build -ldflags "$LDFLAGS" -o dist/syncr-darwin-arm64 .
+GOOS=linux GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/syncr-linux-amd64 .
+GOOS=windows GOARCH=amd64 go build -ldflags "$LDFLAGS" -o dist/syncr-windows-amd64.exe .
+```
 
 ## Dependencies
 
-| Package | Purpose |
-|---------|---------|
-| commander | CLI argument parsing |
-| @types/bun | Bun type definitions |
-| @types/node | Node.js type definitions |
+rclone is embedded as a Go library - no external installation needed.
 
-External:
-- **rclone**: Sync engine (must be in PATH)
-- **pm2**: Scheduling (optional)
-
-## Extensibility
-
-### Adding Sources
-
-Edit machine config:
-```json
-{
-  "name": "NewProject",
-  "path": "/path/to/folder",
-  "enabled": true
-}
 ```
-
-### Custom Filters
-
-Edit `config/filters.txt`:
-```
-+ custom_pattern/**
-- unwanted_pattern/**
-```
-
-### Custom Schedule
-
-Edit `ecosystem.config.js`:
-```javascript
-cron_restart: '*/30 * * * *'  // Every 30 minutes
+github.com/rclone/rclone  # Sync engine (bisync)
 ```
 
 ## Limitations
 
-- No automatic conflict resolution
-- No versioning (use cloud sync or git for that)
-- No encryption (relies on filesystem/cloud provider)
-
-## Recovery
-
-### Restore Single Project
-
-```bash
-cp -r backups/MACHINE/PROJECT /target/path
-```
-
-### Cross-Machine Access
-
-If using cloud sync, all machines have access to all backups:
-```
-backups/MACHINE1/  # Accessible on all machines
-backups/MACHINE2/  # Accessible on all machines
-```
+- Conflicts require manual resolution
+- No file versioning (use cloud provider's versioning)
+- No encryption (relies on cloud provider)
+- Requires cloud sync to complete before bisync sees changes
