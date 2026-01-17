@@ -139,7 +139,9 @@ func TestListConflicts_EmptyDir(t *testing.T) {
 }
 
 func TestListConflicts_NonExistent(t *testing.T) {
-	_, err := ListConflicts("/nonexistent/path/12345")
+	tmpDir := t.TempDir()
+	nonexistentPath := filepath.Join(tmpDir, "nonexistent", "path")
+	_, err := ListConflicts(nonexistentPath)
 	if err == nil {
 		t.Error("expected error for non-existent path")
 	}

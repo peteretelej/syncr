@@ -1,5 +1,5 @@
 // Package state manages sync state tracking for projects.
-// State is stored in {cloud_root}/_syncr/state.json so it travels with the data
+// State is stored in {sync_root}/_syncr/state.json so it travels with the data
 // and is accessible from any machine.
 package state
 
@@ -13,7 +13,7 @@ import (
 )
 
 // State tracks project initialization and sync history.
-// It is stored at {cloud_root}/_syncr/state.json so it travels with the data.
+// It is stored at {sync_root}/_syncr/state.json so it travels with the data.
 type State struct {
 	Version   int                     `json:"version"`
 	MachineID string                  `json:"machine_id"`

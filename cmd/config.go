@@ -18,7 +18,7 @@ func ShowConfig(configPath string) {
 	fmt.Printf("Config: %s\n", cfg.Path())
 	fmt.Printf("State:  %s/state.json\n", cfg.SyncrDataDir())
 	fmt.Println()
-	fmt.Printf("cloud_root: %s\n", cfg.CloudRoot)
+	fmt.Printf("sync_root: %s\n", cfg.SyncRoot)
 	fmt.Printf("sync_interval: %ds\n", cfg.SyncIntervalSeconds)
 	fmt.Println()
 	fmt.Printf("Projects (%d):\n", len(cfg.Projects))
@@ -30,7 +30,7 @@ func ShowConfig(configPath string) {
 		}
 		fmt.Printf("  %s (%s)\n", p.Name, status)
 		fmt.Printf("    local:  %s\n", p.LocalPath)
-		fmt.Printf("    cloud:  %s\n", p.CloudSubpath)
+		fmt.Printf("    cloud:  %s\n", p.SyncPath)
 		fmt.Println()
 	}
 }

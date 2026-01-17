@@ -36,7 +36,8 @@ func TestValidatePath(t *testing.T) {
 	}
 
 	// Non-existent path should fail
-	err = validatePath("/nonexistent/path/12345")
+	nonexistentPath := filepath.Join(tmpDir, "nonexistent", "path")
+	err = validatePath(nonexistentPath)
 	if err == nil {
 		t.Error("validatePath should fail for non-existent path")
 	}
@@ -72,13 +73,15 @@ func TestRunBisync_InvalidPaths(t *testing.T) {
 	}
 
 	// Test with non-existent cloud path
-	_, err = RunBisync(ctx, localPath, "/nonexistent/cloud/path", opts)
+	nonexistentCloud := filepath.Join(tmpDir, "nonexistent", "cloud")
+	_, err = RunBisync(ctx, localPath, nonexistentCloud, opts)
 	if err == nil {
 		t.Error("RunBisync should fail with non-existent cloud path")
 	}
 
 	// Test with non-existent local path
-	_, err = RunBisync(ctx, "/nonexistent/local/path", localPath, opts)
+	nonexistentLocal := filepath.Join(tmpDir, "nonexistent", "local")
+	_, err = RunBisync(ctx, nonexistentLocal, localPath, opts)
 	if err == nil {
 		t.Error("RunBisync should fail with non-existent local path")
 	}

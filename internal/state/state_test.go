@@ -284,12 +284,14 @@ func TestSave_NoPath(t *testing.T) {
 }
 
 func TestPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	statePath := filepath.Join(tmpDir, "state.json")
 	s := &State{
-		path: "/test/state.json",
+		path: statePath,
 	}
 
-	if got := s.Path(); got != "/test/state.json" {
-		t.Errorf("Path() = %q, want %q", got, "/test/state.json")
+	if got := s.Path(); got != statePath {
+		t.Errorf("Path() = %q, want %q", got, statePath)
 	}
 }
 

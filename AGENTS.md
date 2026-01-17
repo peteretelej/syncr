@@ -12,11 +12,11 @@ Lightweight bidirectional folder sync. Single Go binary with rclone embedded. Wo
 syncr daemon (continuous loop)
     |
     v
-internal/sync/bisync.go --> rclone bisync --> cloud_root/{project}/
+internal/sync/bisync.go --> rclone bisync --> sync_root/{project}/
     |
     +-- reads: syncr.json (config)
-    +-- reads/writes: {cloud_root}/_syncr/state.json
-    +-- logs: {cloud_root}/_syncr/logs/syncr_YYYYMMDD.log
+    +-- reads/writes: {sync_root}/_syncr/state.json
+    +-- logs: {sync_root}/_syncr/logs/syncr_YYYYMMDD.log
 ```
 
 ## Key Files
@@ -41,13 +41,13 @@ internal/sync/bisync.go --> rclone bisync --> cloud_root/{project}/
 
 ```json
 {
-  "cloud_root": "/Users/you/OneDrive/syncr",
+  "sync_root": "/Users/you/OneDrive/syncr",
   "sync_interval_seconds": 300,
   "projects": [
     {
       "name": "docs",
       "local_path": "/Users/you/Projects/app/docs",
-      "cloud_subpath": "docs",
+      "sync_path": "docs",
       "enabled": true
     }
   ]
@@ -59,7 +59,7 @@ internal/sync/bisync.go --> rclone bisync --> cloud_root/{project}/
 Uses rclone bisync (bidirectional sync):
 
 ```
-local_path  <--->  cloud_root/cloud_subpath/
+local_path  <--->  sync_root/sync_path/
 ```
 
 - **Bidirectional**: Changes sync both ways
@@ -134,7 +134,7 @@ syncr/
 
 Cloud storage structure:
 ```
-{cloud_root}/
+{sync_root}/
 ├── _syncr/
 │   ├── state.json       # Sync state
 │   ├── logs/            # Log files
@@ -165,6 +165,8 @@ go build -ldflags "-X main.version=v1.0.0 -X main.commit=$(git rev-parse --short
 ```
 
 ## Quick Validation
+
+Run `./scripts/pre-push.sh` before committing - it checks formatting, vet, build, and tests.
 
 ```bash
 # Build and check help

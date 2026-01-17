@@ -26,13 +26,13 @@ Create `syncr.json` in your working directory:
 
 ```json
 {
-  "cloud_root": "C:\\Users\\You\\OneDrive\\syncr",
+  "sync_root": "C:\\Users\\You\\OneDrive\\syncr",
   "sync_interval_seconds": 300,
   "projects": [
     {
       "name": "docs",
       "local_path": "C:\\Users\\You\\Projects\\myapp\\docs",
-      "cloud_subpath": "docs",
+      "sync_path": "docs",
       "enabled": true
     }
   ]
@@ -56,19 +56,19 @@ syncr daemon
 
 ```json
 {
-  "cloud_root": "C:\\Users\\You\\OneDrive\\syncr",
+  "sync_root": "C:\\Users\\You\\OneDrive\\syncr",
   "sync_interval_seconds": 300,
   "projects": [
     {
       "name": "project-docs",
       "local_path": "C:\\Users\\You\\Projects\\myapp\\docs",
-      "cloud_subpath": "project-docs",
+      "sync_path": "project-docs",
       "enabled": true
     },
     {
       "name": "notes",
       "local_path": "C:\\Users\\You\\Notes",
-      "cloud_subpath": "notes",
+      "sync_path": "notes",
       "enabled": true
     }
   ]
@@ -77,11 +77,11 @@ syncr daemon
 
 | Field | Description |
 |-------|-------------|
-| `cloud_root` | Base path in your cloud storage folder |
+| `sync_root` | Base path in your cloud storage folder |
 | `sync_interval_seconds` | How often daemon syncs (default: 300) |
 | `projects[].name` | Project identifier |
 | `projects[].local_path` | Absolute path to local folder |
-| `projects[].cloud_subpath` | Subfolder name in cloud_root |
+| `projects[].sync_path` | Subfolder name in sync_root |
 | `projects[].enabled` | Set false to skip this project |
 
 ## Commands
@@ -113,7 +113,7 @@ Local Folder                          Cloud Storage
 C:\Users\You\Projects\myapp\docs  <-->  OneDrive\syncr\docs\
 ```
 
-State and logs are stored in `{cloud_root}/_syncr/`:
+State and logs are stored in `{sync_root}/_syncr/`:
 - `state.json` - sync history, initialization status
 - `logs/` - daily log files
 - `bisync/` - rclone bisync working data
