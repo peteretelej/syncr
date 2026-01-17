@@ -1,13 +1,9 @@
-# Backup directories - do not commit actual backups
-backups/
+# User config - contains local paths
+syncr.json
 
-# Logs - contain potentially sensitive paths
+# Logs
 logs/
 *.log
-
-# Machine-specific configurations - may contain local paths
-config/machine-configs/
-config/sources.json
 
 # Temporary files
 *.tmp
@@ -26,16 +22,7 @@ desktop.ini
 .idea/
 *.code-workspace
 
-# Go
+# Go binaries
 syncr
 *.exe
 /dist/
-
-# Legacy (can be removed later)
-node_modules/
-bun.lock
-bun.lockb
-
-# pm2
-.pm2/
-pm2-*.log

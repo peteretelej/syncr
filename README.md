@@ -22,23 +22,26 @@ go install github.com/peteretelej/syncr@latest
 
 ## Quick Start
 
-```bash
-# Create config file
-cat > syncr.json << 'EOF'
+Create `syncr.json` in your working directory:
+
+```json
 {
-  "cloud_root": "/path/to/OneDrive/syncr",
+  "cloud_root": "C:\\Users\\You\\OneDrive\\syncr",
   "sync_interval_seconds": 300,
   "projects": [
     {
       "name": "docs",
-      "local_path": "/path/to/local/docs",
+      "local_path": "C:\\Users\\You\\Projects\\myapp\\docs",
       "cloud_subpath": "docs",
       "enabled": true
     }
   ]
 }
-EOF
+```
 
+Then run:
+
+```bash
 # Initialize project (required before first sync)
 syncr init docs
 
@@ -51,22 +54,20 @@ syncr daemon
 
 ## Configuration
 
-Create `syncr.json` in your working directory:
-
 ```json
 {
-  "cloud_root": "/Users/you/OneDrive/syncr",
+  "cloud_root": "C:\\Users\\You\\OneDrive\\syncr",
   "sync_interval_seconds": 300,
   "projects": [
     {
       "name": "project-docs",
-      "local_path": "/Users/you/Projects/myapp/docs",
+      "local_path": "C:\\Users\\You\\Projects\\myapp\\docs",
       "cloud_subpath": "project-docs",
       "enabled": true
     },
     {
       "name": "notes",
-      "local_path": "/Users/you/Notes",
+      "local_path": "C:\\Users\\You\\Notes",
       "cloud_subpath": "notes",
       "enabled": true
     }
@@ -108,8 +109,8 @@ syncr version            # Show version
 syncr uses rclone's bisync under the hood. Files sync bidirectionally:
 
 ```
-Local Folder  <--->  Cloud Storage
-~/docs/       <--->  OneDrive/syncr/docs/
+Local Folder                          Cloud Storage
+C:\Users\You\Projects\myapp\docs  <-->  OneDrive\syncr\docs\
 ```
 
 State and logs are stored in `{cloud_root}/_syncr/`:
@@ -168,7 +169,8 @@ syncr/
 │   ├── state/           # Sync state tracking
 │   ├── sync/            # rclone bisync wrapper
 │   └── logger/          # Logging
-├── syncr.json           # Your config (create this)
+├── syncr.example.json   # Example config
+├── syncr.json           # Your config (create this, gitignored)
 └── tests/               # Integration tests
 ```
 
