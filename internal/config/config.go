@@ -12,7 +12,7 @@ import (
 
 // Config represents the syncr configuration.
 type Config struct {
-	CloudRoot           string    `json:"cloud_root"`
+	SyncRoot            string    `json:"sync_root"`
 	SyncIntervalSeconds int       `json:"sync_interval_seconds"`
 	Projects            []Project `json:"projects"`
 
@@ -21,10 +21,10 @@ type Config struct {
 
 // Project represents a single sync project.
 type Project struct {
-	Name         string `json:"name"`
-	LocalPath    string `json:"local_path"`
-	CloudSubpath string `json:"cloud_subpath"`
-	Enabled      bool   `json:"enabled"`
+	Name      string `json:"name"`
+	LocalPath string `json:"local_path"`
+	SyncPath  string `json:"sync_path"`
+	Enabled   bool   `json:"enabled"`
 }
 
 // Load loads configuration from the specified path or default location.
@@ -85,24 +85,26 @@ func (c *Config) Save() error {
 
 // Validate checks the configuration for errors.
 func (c *Config) Validate() error {
-	if c.CloudRoot == "" {
-		return errors.New("cloud_root is required")
+	if c.SyncRoot == "" {
+		return errors.New("sync_root is required")
 	}
 
-	if !filepath.IsAbs(c.CloudRoot) {
-		return errors.New("cloud_root must be an absolute path")
+	if !filepath.IsAbs(c.SyncRoot) {
+		return errors.New("sync_root must be an absolute path")
 	}
 
-	if _, err := os.Stat(c.CloudRoot); os.IsNotExist(err) {
-		return fmt.Errorf("cloud_root does not exist: %s", c.CloudRoot)
+	if _, err := os.Stat(c.SyncRoot); os.IsNotExist(err) {
+		return fmt.Errorf("sync_root does not exist: %s", c.SyncRoot)
 	}
 
 	if c.SyncIntervalSeconds < 60 {
 		return errors.New("sync_interval_seconds must be at least 60")
 	}
 
-	// Check for duplicate project names
+	// Check for duplicate project names and overlapping sync paths
 	names := make(map[string]bool)
+	syncPaths := make([]string, 0, len(c.Projects))
+
 	for _, p := range c.Projects {
 		if p.Name == "" {
 			return errors.New("project name is required")
@@ -115,9 +117,41 @@ func (c *Config) Validate() error {
 		if !filepath.IsAbs(p.LocalPath) {
 			return fmt.Errorf("project %s: local_path must be an absolute path", p.Name)
 		}
+
+		// Validate sync_path: check for duplicates and overlapping paths
+		normalized := filepath.Clean(p.SyncPath)
+		if normalized == "" || normalized == "." {
+			normalized = p.Name // Default to project name if empty
+		}
+
+		for _, existing := range syncPaths {
+			if normalized == existing {
+				return fmt.Errorf("duplicate sync_path: %s", p.SyncPath)
+			}
+			// Check for parent/child overlap (nested paths)
+			if isOverlappingPath(normalized, existing) {
+				return fmt.Errorf("overlapping sync_path: %q and %q would conflict", p.SyncPath, existing)
+			}
+		}
+		syncPaths = append(syncPaths, normalized)
 	}
 
 	return nil
+}
+
+// isOverlappingPath checks if two paths overlap (one is parent of the other).
+func isOverlappingPath(path1, path2 string) bool {
+	// Normalize paths and add separator for proper prefix matching
+	p1 := filepath.Clean(path1) + string(filepath.Separator)
+	p2 := filepath.Clean(path2) + string(filepath.Separator)
+
+	// Check if either is a prefix of the other
+	return len(p1) != len(p2) && (hasPathPrefix(p1, p2) || hasPathPrefix(p2, p1))
+}
+
+// hasPathPrefix checks if path starts with prefix (using path separators).
+func hasPathPrefix(path, prefix string) bool {
+	return len(path) >= len(prefix) && path[:len(prefix)] == prefix
 }
 
 // Path returns the configuration file path.
@@ -127,7 +161,7 @@ func (c *Config) Path() string {
 
 // SyncrDataDir returns the path to the _syncr metadata directory.
 func (c *Config) SyncrDataDir() string {
-	return filepath.Join(c.CloudRoot, "_syncr")
+	return filepath.Join(c.SyncRoot, "_syncr")
 }
 
 // GetProject returns a project by name, or nil if not found.
@@ -143,7 +177,7 @@ func (c *Config) GetProject(name string) *Project {
 // DefaultConfig returns a default configuration template.
 func DefaultConfig() *Config {
 	return &Config{
-		CloudRoot:           "",
+		SyncRoot:            "",
 		SyncIntervalSeconds: 300,
 		Projects:            []Project{},
 	}

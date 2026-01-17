@@ -20,11 +20,11 @@ Lightweight bidirectional folder sync. Single Go binary with rclone embedded. Wo
            |
            +---> Config (syncr.json)
            |
-           +---> State ({cloud_root}/_syncr/state.json)
+           +---> State ({sync_root}/_syncr/state.json)
            |
            +---> rclone bisync (embedded library)
            |
-           +---> {cloud_root}/{project}/
+           +---> {sync_root}/{project}/
 ```
 
 ## Data Flow
@@ -83,7 +83,7 @@ User config (not in repo):
 
 Cloud storage:
 ```
-{cloud_root}/
+{sync_root}/
 ├── _syncr/
 │   ├── state.json           # Sync state (travels with data)
 │   ├── logs/
@@ -120,7 +120,7 @@ Configuration loading and validation.
 
 ```go
 type Config struct {
-    CloudRoot           string    `json:"cloud_root"`
+    SyncRoot           string    `json:"sync_root"`
     SyncIntervalSeconds int       `json:"sync_interval_seconds"`
     Projects            []Project `json:"projects"`
 }
@@ -128,7 +128,7 @@ type Config struct {
 type Project struct {
     Name         string `json:"name"`
     LocalPath    string `json:"local_path"`
-    CloudSubpath string `json:"cloud_subpath"`
+    SyncPath string `json:"sync_path"`
     Enabled      bool   `json:"enabled"`
 }
 ```
@@ -137,7 +137,7 @@ Responsibilities:
 - Load from `syncr.json` or `-config` path
 - Validate paths exist and are absolute
 - Apply defaults (sync interval = 300s)
-- Compute `SyncrDataDir()` as `{cloud_root}/_syncr`
+- Compute `SyncrDataDir()` as `{sync_root}/_syncr`
 
 ### internal/state
 
@@ -231,13 +231,13 @@ Format:
 
 ```json
 {
-  "cloud_root": "/Users/you/OneDrive/syncr",
+  "sync_root": "/Users/you/OneDrive/syncr",
   "sync_interval_seconds": 300,
   "projects": [
     {
       "name": "docs",
       "local_path": "/Users/you/Projects/app/docs",
-      "cloud_subpath": "docs",
+      "sync_path": "docs",
       "enabled": true
     }
   ]
@@ -246,12 +246,12 @@ Format:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `cloud_root` | string | required | Base path in cloud storage |
+| `sync_root` | string | required | Base path in cloud storage |
 | `sync_interval_seconds` | int | 300 | Daemon sync interval (min 60) |
 | `projects` | array | required | List of projects to sync |
 | `projects[].name` | string | required | Project identifier |
 | `projects[].local_path` | string | required | Absolute local path |
-| `projects[].cloud_subpath` | string | required | Subfolder in cloud_root |
+| `projects[].sync_path` | string | required | Subfolder in sync_root |
 | `projects[].enabled` | bool | true | Include in sync |
 
 ## Initialization

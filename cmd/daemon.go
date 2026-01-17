@@ -117,7 +117,7 @@ func runDaemonSync(cfg *config.Config, st *state.State, log *logger.Logger) {
 			continue
 		}
 
-		cloudPath := filepath.Join(cfg.CloudRoot, project.CloudSubpath)
+		syncPath := filepath.Join(cfg.SyncRoot, project.SyncPath)
 
 		// Check paths exist with actionable error messages
 		if !pathExists(project.LocalPath) {
@@ -127,10 +127,10 @@ func runDaemonSync(cfg *config.Config, st *state.State, log *logger.Logger) {
 			continue
 		}
 
-		if !pathExists(cloudPath) {
-			log.Warn("%s: cloud path missing: %s", project.Name, cloudPath)
+		if !pathExists(syncPath) {
+			log.Warn("%s: cloud path missing: %s", project.Name, syncPath)
 			log.Warn("  Fix: Run 'syncr init %s' to create it", project.Name)
-			st.RecordError(project.Name, fmt.Errorf("cloud path missing: %s", cloudPath))
+			st.RecordError(project.Name, fmt.Errorf("cloud path missing: %s", syncPath))
 			continue
 		}
 
@@ -143,7 +143,7 @@ func runDaemonSync(cfg *config.Config, st *state.State, log *logger.Logger) {
 			SyncrDataDir: cfg.SyncrDataDir(),
 		}
 
-		_, err := sync.RunBisync(ctx, project.LocalPath, cloudPath, opts)
+		_, err := sync.RunBisync(ctx, project.LocalPath, syncPath, opts)
 		duration := time.Since(start)
 
 		if err != nil {
@@ -160,7 +160,7 @@ func runDaemonSync(cfg *config.Config, st *state.State, log *logger.Logger) {
 		}
 
 		// Check for conflicts
-		conflictCount, _ := sync.CountConflicts(cloudPath)
+		conflictCount, _ := sync.CountConflicts(syncPath)
 
 		if conflictCount > 0 {
 			log.Warn("%s: synced with %d conflict(s) (%v)", project.Name, conflictCount, duration.Round(time.Millisecond))

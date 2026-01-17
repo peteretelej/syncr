@@ -15,7 +15,7 @@ import (
 // TestHarness provides a temporary environment for integration tests.
 type TestHarness struct {
 	TmpDir     string
-	CloudRoot  string
+	SyncRoot   string
 	LocalDir   string
 	ConfigPath string
 	Config     *config.Config
@@ -31,14 +31,14 @@ func NewTestHarness(t *testing.T) *TestHarness {
 
 	h := &TestHarness{
 		TmpDir:     tmpDir,
-		CloudRoot:  filepath.Join(tmpDir, "cloud"),
+		SyncRoot:   filepath.Join(tmpDir, "cloud"),
 		LocalDir:   filepath.Join(tmpDir, "local"),
 		ConfigPath: filepath.Join(tmpDir, "syncr.json"),
 		t:          t,
 	}
 
 	// Create directories
-	if err := os.MkdirAll(h.CloudRoot, 0755); err != nil {
+	if err := os.MkdirAll(h.SyncRoot, 0755); err != nil {
 		t.Fatalf("failed to create cloud root: %v", err)
 	}
 	if err := os.MkdirAll(h.LocalDir, 0755); err != nil {
@@ -53,7 +53,7 @@ func (h *TestHarness) CreateConfig(projects []config.Project) {
 	h.t.Helper()
 
 	cfg := &config.Config{
-		CloudRoot:           h.CloudRoot,
+		SyncRoot:            h.SyncRoot,
 		SyncIntervalSeconds: 300,
 		Projects:            projects,
 	}
@@ -122,10 +122,10 @@ func TestIntegration_ConfigAndState(t *testing.T) {
 	// Create config with one project
 	h.CreateConfig([]config.Project{
 		{
-			Name:         "TestProject",
-			LocalPath:    h.LocalDir,
-			CloudSubpath: "TestProject",
-			Enabled:      true,
+			Name:      "TestProject",
+			LocalPath: h.LocalDir,
+			SyncPath:  "TestProject",
+			Enabled:   true,
 		},
 	})
 
@@ -224,9 +224,9 @@ func TestIntegration_MultipleProjects(t *testing.T) {
 	os.MkdirAll(localB, 0755)
 
 	h.CreateConfig([]config.Project{
-		{Name: "ProjectA", LocalPath: localA, CloudSubpath: "A", Enabled: true},
-		{Name: "ProjectB", LocalPath: localB, CloudSubpath: "B", Enabled: true},
-		{Name: "ProjectC", LocalPath: localA, CloudSubpath: "C", Enabled: false},
+		{Name: "ProjectA", LocalPath: localA, SyncPath: "A", Enabled: true},
+		{Name: "ProjectB", LocalPath: localB, SyncPath: "B", Enabled: true},
+		{Name: "ProjectC", LocalPath: localA, SyncPath: "C", Enabled: false},
 	})
 
 	// Get projects
@@ -306,32 +306,32 @@ func TestIntegration_InitLocalEmptyCloudHasFiles(t *testing.T) {
 
 	// Set up cloud path with files
 	cloudSubpath := "TestProject"
-	cloudPath := filepath.Join(h.CloudRoot, cloudSubpath)
-	if err := os.MkdirAll(cloudPath, 0755); err != nil {
+	syncPath := filepath.Join(h.SyncRoot, cloudSubpath)
+	if err := os.MkdirAll(syncPath, 0755); err != nil {
 		t.Fatal(err)
 	}
-	h.CreateFile(cloudPath, "cloud-file.txt", "from cloud")
-	h.CreateFile(cloudPath, "subdir/nested.txt", "nested content")
+	h.CreateFile(syncPath, "cloud-file.txt", "from cloud")
+	h.CreateFile(syncPath, "subdir/nested.txt", "nested content")
 
 	// Local should be empty
 	h.CreateConfig([]config.Project{
 		{
-			Name:         "TestProject",
-			LocalPath:    h.LocalDir,
-			CloudSubpath: cloudSubpath,
-			Enabled:      true,
+			Name:      "TestProject",
+			LocalPath: h.LocalDir,
+			SyncPath:  cloudSubpath,
+			Enabled:   true,
 		},
 	})
 
 	// Verify counts
 	localCount := countFiles(h.LocalDir)
-	cloudCount := countFiles(cloudPath)
+	syncCount := countFiles(syncPath)
 
 	if localCount != 0 {
 		t.Errorf("local should be empty, got %d files", localCount)
 	}
-	if cloudCount != 2 {
-		t.Errorf("cloud should have 2 files, got %d", cloudCount)
+	if syncCount != 2 {
+		t.Errorf("cloud should have 2 files, got %d", syncCount)
 	}
 
 	// Run bisync with resync mode path2 (cloud wins)
@@ -344,7 +344,7 @@ func TestIntegration_InitLocalEmptyCloudHasFiles(t *testing.T) {
 		SyncrDataDir: h.Config.SyncrDataDir(),
 	}
 
-	result, err := syncpkg.RunBisync(ctx, h.LocalDir, cloudPath, opts)
+	result, err := syncpkg.RunBisync(ctx, h.LocalDir, syncPath, opts)
 	if err != nil {
 		t.Fatalf("bisync failed: %v", err)
 	}
@@ -372,21 +372,21 @@ func TestIntegration_InitBothHaveFiles(t *testing.T) {
 
 	// Set up cloud path with files
 	cloudSubpath := "TestProject"
-	cloudPath := filepath.Join(h.CloudRoot, cloudSubpath)
-	if err := os.MkdirAll(cloudPath, 0755); err != nil {
+	syncPath := filepath.Join(h.SyncRoot, cloudSubpath)
+	if err := os.MkdirAll(syncPath, 0755); err != nil {
 		t.Fatal(err)
 	}
-	h.CreateFile(cloudPath, "cloud-only.txt", "from cloud")
+	h.CreateFile(syncPath, "cloud-only.txt", "from cloud")
 
 	// Set up local with different files
 	h.CreateFile(h.LocalDir, "local-only.txt", "from local")
 
 	h.CreateConfig([]config.Project{
 		{
-			Name:         "TestProject",
-			LocalPath:    h.LocalDir,
-			CloudSubpath: cloudSubpath,
-			Enabled:      true,
+			Name:      "TestProject",
+			LocalPath: h.LocalDir,
+			SyncPath:  cloudSubpath,
+			Enabled:   true,
 		},
 	})
 
@@ -400,7 +400,7 @@ func TestIntegration_InitBothHaveFiles(t *testing.T) {
 		SyncrDataDir: h.Config.SyncrDataDir(),
 	}
 
-	result, err := syncpkg.RunBisync(ctx, h.LocalDir, cloudPath, opts)
+	result, err := syncpkg.RunBisync(ctx, h.LocalDir, syncPath, opts)
 	if err != nil {
 		t.Fatalf("bisync failed: %v", err)
 	}
@@ -416,10 +416,10 @@ func TestIntegration_InitBothHaveFiles(t *testing.T) {
 	if !h.FileExists(filepath.Join(h.LocalDir, "cloud-only.txt")) {
 		t.Error("cloud-only.txt should be synced to local")
 	}
-	if !h.FileExists(filepath.Join(cloudPath, "local-only.txt")) {
+	if !h.FileExists(filepath.Join(syncPath, "local-only.txt")) {
 		t.Error("local-only.txt should be synced to cloud")
 	}
-	if !h.FileExists(filepath.Join(cloudPath, "cloud-only.txt")) {
+	if !h.FileExists(filepath.Join(syncPath, "cloud-only.txt")) {
 		t.Error("cloud-only.txt should still exist in cloud")
 	}
 }
@@ -434,8 +434,8 @@ func TestIntegration_SyncCycle(t *testing.T) {
 
 	// Set up cloud path
 	cloudSubpath := "TestProject"
-	cloudPath := filepath.Join(h.CloudRoot, cloudSubpath)
-	if err := os.MkdirAll(cloudPath, 0755); err != nil {
+	syncPath := filepath.Join(h.SyncRoot, cloudSubpath)
+	if err := os.MkdirAll(syncPath, 0755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -444,10 +444,10 @@ func TestIntegration_SyncCycle(t *testing.T) {
 
 	h.CreateConfig([]config.Project{
 		{
-			Name:         "TestProject",
-			LocalPath:    h.LocalDir,
-			CloudSubpath: cloudSubpath,
-			Enabled:      true,
+			Name:      "TestProject",
+			LocalPath: h.LocalDir,
+			SyncPath:  cloudSubpath,
+			Enabled:   true,
 		},
 	})
 	h.LoadState()
@@ -462,7 +462,7 @@ func TestIntegration_SyncCycle(t *testing.T) {
 		SyncrDataDir: syncrDir,
 	}
 
-	_, err := syncpkg.RunBisync(ctx, h.LocalDir, cloudPath, opts)
+	_, err := syncpkg.RunBisync(ctx, h.LocalDir, syncPath, opts)
 	if err != nil {
 		t.Fatalf("initial bisync failed: %v", err)
 	}
@@ -474,7 +474,7 @@ func TestIntegration_SyncCycle(t *testing.T) {
 
 	// Make changes on both sides
 	h.CreateFile(h.LocalDir, "new-local.txt", "new local file")
-	h.CreateFile(cloudPath, "new-cloud.txt", "new cloud file")
+	h.CreateFile(syncPath, "new-cloud.txt", "new cloud file")
 
 	// Run normal sync (not resync)
 	opts = syncpkg.BisyncOptions{
@@ -482,7 +482,7 @@ func TestIntegration_SyncCycle(t *testing.T) {
 		SyncrDataDir: syncrDir,
 	}
 
-	result, err := syncpkg.RunBisync(ctx, h.LocalDir, cloudPath, opts)
+	result, err := syncpkg.RunBisync(ctx, h.LocalDir, syncPath, opts)
 	if err != nil {
 		t.Fatalf("sync cycle failed: %v", err)
 	}
@@ -495,7 +495,7 @@ func TestIntegration_SyncCycle(t *testing.T) {
 	if !h.FileExists(filepath.Join(h.LocalDir, "new-cloud.txt")) {
 		t.Error("new-cloud.txt should be synced to local")
 	}
-	if !h.FileExists(filepath.Join(cloudPath, "new-local.txt")) {
+	if !h.FileExists(filepath.Join(syncPath, "new-local.txt")) {
 		t.Error("new-local.txt should be synced to cloud")
 	}
 
@@ -515,10 +515,10 @@ func TestIntegration_ErrorPath_MissingLocalPath(t *testing.T) {
 	missingLocalPath := filepath.Join(h.TmpDir, "nonexistent", "local")
 	h.CreateConfig([]config.Project{
 		{
-			Name:         "TestProject",
-			LocalPath:    missingLocalPath,
-			CloudSubpath: "TestProject",
-			Enabled:      true,
+			Name:      "TestProject",
+			LocalPath: missingLocalPath,
+			SyncPath:  "TestProject",
+			Enabled:   true,
 		},
 	})
 
@@ -527,14 +527,14 @@ func TestIntegration_ErrorPath_MissingLocalPath(t *testing.T) {
 
 	// Try to sync - should fail with clear error
 	ctx := context.Background()
-	cloudPath := filepath.Join(h.CloudRoot, "TestProject")
-	os.MkdirAll(cloudPath, 0755)
+	syncPath := filepath.Join(h.SyncRoot, "TestProject")
+	os.MkdirAll(syncPath, 0755)
 
 	opts := syncpkg.BisyncOptions{
 		SyncrDataDir: h.Config.SyncrDataDir(),
 	}
 
-	_, err := syncpkg.RunBisync(ctx, missingLocalPath, cloudPath, opts)
+	_, err := syncpkg.RunBisync(ctx, missingLocalPath, syncPath, opts)
 	if err == nil {
 		t.Error("sync should fail with missing local path")
 	}
@@ -554,13 +554,13 @@ func TestIntegration_ErrorPath_MissingLocalPath(t *testing.T) {
 func TestIntegration_ErrorPath_MissingCloudPath(t *testing.T) {
 	h := NewTestHarness(t)
 
-	missingCloudPath := filepath.Join(h.CloudRoot, "nonexistent", "cloud")
+	missingCloudPath := filepath.Join(h.SyncRoot, "nonexistent", "cloud")
 	h.CreateConfig([]config.Project{
 		{
-			Name:         "TestProject",
-			LocalPath:    h.LocalDir,
-			CloudSubpath: "nonexistent/cloud",
-			Enabled:      true,
+			Name:      "TestProject",
+			LocalPath: h.LocalDir,
+			SyncPath:  "nonexistent/cloud",
+			Enabled:   true,
 		},
 	})
 
@@ -624,8 +624,8 @@ func TestIntegration_DryRun(t *testing.T) {
 
 	// Set up paths
 	cloudSubpath := "TestProject"
-	cloudPath := filepath.Join(h.CloudRoot, cloudSubpath)
-	if err := os.MkdirAll(cloudPath, 0755); err != nil {
+	syncPath := filepath.Join(h.SyncRoot, cloudSubpath)
+	if err := os.MkdirAll(syncPath, 0755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -634,10 +634,10 @@ func TestIntegration_DryRun(t *testing.T) {
 
 	h.CreateConfig([]config.Project{
 		{
-			Name:         "TestProject",
-			LocalPath:    h.LocalDir,
-			CloudSubpath: cloudSubpath,
-			Enabled:      true,
+			Name:      "TestProject",
+			LocalPath: h.LocalDir,
+			SyncPath:  cloudSubpath,
+			Enabled:   true,
 		},
 	})
 	h.LoadState()
@@ -651,7 +651,7 @@ func TestIntegration_DryRun(t *testing.T) {
 		SyncrDataDir: h.Config.SyncrDataDir(),
 	}
 
-	result, err := syncpkg.RunBisync(ctx, h.LocalDir, cloudPath, opts)
+	result, err := syncpkg.RunBisync(ctx, h.LocalDir, syncPath, opts)
 	if err != nil {
 		t.Fatalf("dry-run bisync failed: %v", err)
 	}
@@ -661,7 +661,7 @@ func TestIntegration_DryRun(t *testing.T) {
 	}
 
 	// File should NOT have been synced to cloud (dry run)
-	if h.FileExists(filepath.Join(cloudPath, "local-file.txt")) {
+	if h.FileExists(filepath.Join(syncPath, "local-file.txt")) {
 		t.Error("dry-run should not sync files to cloud")
 	}
 }
@@ -724,8 +724,8 @@ func TestIntegration_DaemonSkipsUninitializedProjects(t *testing.T) {
 	h := NewTestHarness(t)
 
 	h.CreateConfig([]config.Project{
-		{Name: "InitProject", LocalPath: h.LocalDir, CloudSubpath: "init", Enabled: true},
-		{Name: "UninitProject", LocalPath: h.LocalDir, CloudSubpath: "uninit", Enabled: true},
+		{Name: "InitProject", LocalPath: h.LocalDir, SyncPath: "init", Enabled: true},
+		{Name: "UninitProject", LocalPath: h.LocalDir, SyncPath: "uninit", Enabled: true},
 	})
 	h.LoadState()
 
@@ -752,8 +752,8 @@ func TestIntegration_DaemonSkipsDisabledProjects(t *testing.T) {
 	h := NewTestHarness(t)
 
 	h.CreateConfig([]config.Project{
-		{Name: "EnabledProject", LocalPath: h.LocalDir, CloudSubpath: "enabled", Enabled: true},
-		{Name: "DisabledProject", LocalPath: h.LocalDir, CloudSubpath: "disabled", Enabled: false},
+		{Name: "EnabledProject", LocalPath: h.LocalDir, SyncPath: "enabled", Enabled: true},
+		{Name: "DisabledProject", LocalPath: h.LocalDir, SyncPath: "disabled", Enabled: false},
 	})
 
 	// GetProject should show enabled/disabled status

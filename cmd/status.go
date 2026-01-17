@@ -69,7 +69,7 @@ func Status(configPath string) {
 
 	for _, project := range cfg.Projects {
 		ps := st.GetProject(project.Name)
-		cloudPath := filepath.Join(cfg.CloudRoot, project.CloudSubpath)
+		syncPath := filepath.Join(cfg.SyncRoot, project.SyncPath)
 
 		// Determine status
 		var status string
@@ -96,8 +96,8 @@ func Status(configPath string) {
 		// Count conflicts
 		conflictCount := 0
 		var conflicts []string
-		if ps.Initialized && pathExists(cloudPath) {
-			conflicts, _ = sync.ListConflicts(cloudPath)
+		if ps.Initialized && pathExists(syncPath) {
+			conflicts, _ = sync.ListConflicts(syncPath)
 			conflictCount = len(conflicts)
 			if conflictCount > 0 {
 				allConflicts = append(allConflicts, conflictInfo{
