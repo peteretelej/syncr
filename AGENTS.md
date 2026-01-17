@@ -21,18 +21,18 @@ src/cli.ts --> rclone sync --> ./backups/HOSTNAME/
 
 ## Key Files
 
-| File | Purpose |
-|------|---------|
-| `src/cli.ts` | CLI entry point (Commander.js) |
-| `src/backup.ts` | Main sync orchestration |
-| `src/config.ts` | Config loading and path resolution |
-| `src/rclone.ts` | rclone command builder and executor |
-| `src/logger.ts` | Console and file logging |
-| `src/types.ts` | TypeScript interfaces |
-| `config/machine-configs/*.json` | Per-machine source configurations |
-| `config/filters.txt` | rclone filter rules (exclusions) |
-| `ecosystem.config.js` | pm2 scheduling configuration |
-| `docs/design.md` | Technical architecture details |
+| File                            | Purpose                             |
+| ------------------------------- | ----------------------------------- |
+| `src/cli.ts`                    | CLI entry point (Commander.js)      |
+| `src/backup.ts`                 | Main sync orchestration             |
+| `src/config.ts`                 | Config loading and path resolution  |
+| `src/rclone.ts`                 | rclone command builder and executor |
+| `src/logger.ts`                 | Console and file logging            |
+| `src/types.ts`                  | TypeScript interfaces               |
+| `config/machine-configs/*.json` | Per-machine source configurations   |
+| `config/filters.txt`            | rclone filter rules (exclusions)    |
+| `ecosystem.config.js`           | pm2 scheduling configuration        |
+| `docs/design.md`                | Technical architecture details      |
 
 ## Configuration Format
 
@@ -69,17 +69,21 @@ rclone sync SOURCE DEST --checksum --delete-during
 ## Common Tasks
 
 ### Add new source
+
 1. Edit `config/machine-configs/{HOSTNAME}.json`
 2. Add entry to `sources` array (any folder path)
 3. Test: `bun run syncr --dry-run`
 
 ### Modify rclone options
+
 Edit `buildRcloneArgs()` function in `src/rclone.ts`
 
 ### Change filter rules
+
 Edit `config/filters.txt` - uses rclone filter syntax
 
 ### Modify schedule
+
 Edit `cron_restart` in `ecosystem.config.js`
 
 ## Testing
@@ -148,3 +152,5 @@ bun run syncr --help
 # Single binary
 bun build src/cli.ts --compile --outfile dist/syncr
 ```
+
+WATCH OUT FOR TYPOS - The user may accidentally say "rsync" instead of "syncr" - Clarify to them that that is a typo and confirm clarification if needed.

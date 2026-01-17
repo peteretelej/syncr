@@ -26,9 +26,13 @@ desktop.ini
 .idea/
 *.code-workspace
 
-# Node.js / Bun
+# Go
+syncr
+*.exe
+/dist/
+
+# Legacy (can be removed later)
 node_modules/
-dist/
 bun.lock
 bun.lockb
 
