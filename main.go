@@ -41,6 +41,8 @@ func main() {
 		cmd.Status(configPath)
 	case "config":
 		cmd.ShowConfig(configPath)
+	case "logs":
+		cmd.Logs(args[1:], configPath)
 	case "enable":
 		cmd.SetProjectEnabled(args[1:], configPath, true)
 	case "disable":
@@ -68,6 +70,7 @@ Commands:
   daemon              Run continuous sync daemon
   status              Show status of all projects
   config              Show current configuration
+  logs                Show today's log (use -f to follow)
   enable <project>    Enable a project for syncing
   disable <project>   Disable a project from syncing
   version             Show version information
