@@ -15,7 +15,9 @@ var (
 
 func main() {
 	// Global flags
-	configPath := flag.String("config", "", "path to config file")
+	var configPath string
+	flag.StringVar(&configPath, "config", "", "path to config file")
+	flag.StringVar(&configPath, "c", "", "path to config file (shorthand)")
 	verbose := flag.Bool("verbose", false, "enable verbose output")
 	dryRun := flag.Bool("dry-run", false, "show changes without applying")
 
@@ -30,15 +32,15 @@ func main() {
 
 	switch args[0] {
 	case "init":
-		cmd.Init(args[1:], *configPath, *verbose, *dryRun)
+		cmd.Init(args[1:], configPath, *verbose, *dryRun)
 	case "sync":
-		cmd.Sync(args[1:], *configPath, *verbose, *dryRun)
+		cmd.Sync(args[1:], configPath, *verbose, *dryRun)
 	case "daemon":
-		cmd.Daemon(*configPath, *verbose)
+		cmd.Daemon(configPath, *verbose)
 	case "status":
-		cmd.Status(*configPath)
+		cmd.Status(configPath)
 	case "config":
-		cmd.ShowConfig(*configPath)
+		cmd.ShowConfig(configPath)
 	case "version":
 		cmd.Version(version, commit)
 	case "help":
@@ -66,7 +68,7 @@ Commands:
   help              Show this help message
 
 Options:
-  -config string    Path to config file (default: ./syncr.json)
+  -config, -c string  Path to config file (default: ./syncr.json)
   -verbose          Enable verbose output
   -dry-run          Show what would be synced without making changes
 
