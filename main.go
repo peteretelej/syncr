@@ -63,7 +63,7 @@ Usage:
   syncr <command> [options]
 
 Commands:
-  init <project>      Initialize a project (required before first sync)
+  init [project]      Initialize project(s) (all uninitialized if no name given)
   sync [project]      Run sync once (all projects if no name given)
   daemon              Run continuous sync daemon
   status              Show status of all projects
@@ -79,7 +79,8 @@ Options:
   -dry-run          Show what would be synced without making changes
 
 Examples:
-  syncr init MyProject        Initialize a project for first-time sync
+  syncr init                   Initialize all uninitialized enabled projects
+  syncr init MyProject        Initialize a specific project
   syncr sync                  Sync all enabled projects
   syncr sync MyProject        Sync specific project
   syncr daemon                Run continuous sync every 5 minutes

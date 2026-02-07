@@ -24,9 +24,10 @@ func Init(args []string, configPath string, verbose, dryRun bool) {
 			createStarterConfig(cfgPath)
 			return
 		}
-		fmt.Fprintln(os.Stderr, "Error: project name required")
-		fmt.Fprintln(os.Stderr, "Usage: syncr init <project>")
-		os.Exit(1)
+
+		// Config exists: batch-init all uninitialized enabled projects
+		batchInit(configPath, verbose, dryRun)
+		return
 	}
 
 	projectName := args[0]
@@ -63,10 +64,104 @@ func Init(args []string, configPath string, verbose, dryRun bool) {
 		return
 	}
 
-	// Build paths
+	if err := initProject(cfg, st, project, verbose, dryRun); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	if !dryRun {
+		if err := st.Save(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error saving state: %v\n", err)
+			os.Exit(1)
+		}
+	}
+}
+
+// batchInit initializes all uninitialized enabled projects.
+func batchInit(configPath string, verbose, dryRun bool) {
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		os.Exit(1)
+	}
+
+	st, err := state.LoadWithMigration(cfg.SyncrDataDir())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading state: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Collect enabled projects
+	var enabled []*config.Project
+	for i := range cfg.Projects {
+		if cfg.Projects[i].Enabled {
+			enabled = append(enabled, &cfg.Projects[i])
+		}
+	}
+
+	if len(enabled) == 0 {
+		fmt.Println("No enabled projects in config.")
+		return
+	}
+
+	// Filter to uninitialized
+	var uninitialized []*config.Project
+	for _, p := range enabled {
+		if !st.IsInitialized(p.Name) {
+			uninitialized = append(uninitialized, p)
+		}
+	}
+
+	if len(uninitialized) == 0 {
+		fmt.Println("All enabled projects are already initialized.")
+		return
+	}
+
+	fmt.Printf("Initializing %d uninitialized project(s)...\n", len(uninitialized))
+	if dryRun {
+		fmt.Println("[DRY-RUN mode enabled]")
+	}
+	fmt.Println()
+
+	var failed []string
+	successCount := 0
+
+	for _, project := range uninitialized {
+		err := initProject(cfg, st, project, verbose, dryRun)
+		if err != nil {
+			fmt.Printf("  Error initializing %q: %v\n", project.Name, err)
+			failed = append(failed, project.Name)
+		} else {
+			successCount++
+		}
+		fmt.Println()
+	}
+
+	// Save state once after all projects
+	if !dryRun {
+		if err := st.Save(); err != nil {
+			fmt.Fprintf(os.Stderr, "Error saving state: %v\n", err)
+		}
+	}
+
+	// Print summary
+	fmt.Printf("Initialized %d of %d projects\n", successCount, len(uninitialized))
+	if len(failed) > 0 {
+		fmt.Printf("Failed:")
+		for _, name := range failed {
+			fmt.Printf(" %s", name)
+		}
+		fmt.Println()
+		os.Exit(1)
+	}
+}
+
+// initProject initializes a single project. Returns error instead of calling os.Exit.
+// Does not call st.Save() - the caller is responsible for saving state.
+func initProject(cfg *config.Config, st *state.State, project *config.Project, verbose, dryRun bool) error {
 	syncPath := filepath.Join(cfg.SyncRoot, project.SyncPath)
 
-	fmt.Printf("Initializing project: %s\n", projectName)
+	fmt.Printf("Initializing project: %s\n", project.Name)
 	fmt.Printf("  Local:  %s\n", project.LocalPath)
 	fmt.Printf("  Cloud:  %s\n", syncPath)
 	fmt.Println()
@@ -76,8 +171,7 @@ func Init(args []string, configPath string, verbose, dryRun bool) {
 
 	localExists := pathExists(project.LocalPath)
 	if !localExists {
-		fmt.Fprintf(os.Stderr, "Error: local path does not exist: %s\n", project.LocalPath)
-		os.Exit(1)
+		return fmt.Errorf("local path does not exist: %s", project.LocalPath)
 	}
 
 	// Create cloud folder if it doesn't exist
@@ -86,8 +180,7 @@ func Init(args []string, configPath string, verbose, dryRun bool) {
 			fmt.Printf("  [DRY-RUN] Would create cloud folder: %s\n", syncPath)
 		} else {
 			if err := os.MkdirAll(syncPath, 0755); err != nil {
-				fmt.Fprintf(os.Stderr, "Error creating cloud folder: %v\n", err)
-				os.Exit(1)
+				return fmt.Errorf("creating cloud folder: %v", err)
 			}
 			fmt.Printf("  Created cloud folder: %s\n", syncPath)
 		}
@@ -107,30 +200,22 @@ func Init(args []string, configPath string, verbose, dryRun bool) {
 
 	switch {
 	case localCount == 0 && syncCount > 0:
-		// Cloud has files, local is empty - pull from cloud
 		resyncMode = sync.ResyncPath2
 		actionDesc = "Cloud has files, local is empty. Pulling from cloud..."
 	case syncCount == 0 && localCount > 0:
-		// Local has files, cloud is empty - push to cloud
 		resyncMode = sync.ResyncPath1
 		actionDesc = "Local has files, cloud is empty. Pushing to cloud..."
 	case localCount == 0 && syncCount == 0:
-		// Both empty - nothing to sync
 		actionDesc = "Both folders are empty. Marking as initialized."
 		if dryRun {
 			fmt.Printf("[DRY-RUN] %s\n", actionDesc)
 		} else {
 			fmt.Println(actionDesc)
-			st.MarkInitialized(projectName)
-			if err := st.Save(); err != nil {
-				fmt.Fprintf(os.Stderr, "Error saving state: %v\n", err)
-				os.Exit(1)
-			}
-			fmt.Printf("\nProject %q initialized successfully.\n", projectName)
+			st.MarkInitialized(project.Name)
+			fmt.Printf("Project %q initialized successfully.\n", project.Name)
 		}
-		return
+		return nil
 	default:
-		// Both have files - keep superset
 		resyncMode = sync.ResyncNone
 		actionDesc = "Both folders have files. Merging (keeping superset)..."
 	}
@@ -140,8 +225,8 @@ func Init(args []string, configPath string, verbose, dryRun bool) {
 	if dryRun {
 		fmt.Println()
 		fmt.Println("[DRY-RUN] Would run bisync with --resync")
-		fmt.Printf("[DRY-RUN] Would mark project %q as initialized\n", projectName)
-		return
+		fmt.Printf("[DRY-RUN] Would mark project %q as initialized\n", project.Name)
+		return nil
 	}
 
 	// Run bisync with resync
@@ -159,23 +244,18 @@ func Init(args []string, configPath string, verbose, dryRun bool) {
 	ctx := context.Background()
 	result, err := sync.RunBisync(ctx, project.LocalPath, syncPath, opts)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error during sync: %v\n", err)
-		st.RecordError(projectName, err)
-		st.Save()
-		os.Exit(1)
+		st.RecordError(project.Name, err)
+		return fmt.Errorf("during sync: %v", err)
 	}
 
 	fmt.Printf("  Duration: %v\n", result.Duration.Round(1e8))
 
 	// Mark as initialized
-	st.MarkInitialized(projectName)
-	st.RecordSuccess(projectName)
-	if err := st.Save(); err != nil {
-		fmt.Fprintf(os.Stderr, "Error saving state: %v\n", err)
-		os.Exit(1)
-	}
+	st.MarkInitialized(project.Name)
+	st.RecordSuccess(project.Name)
 
-	fmt.Printf("\nProject %q initialized successfully.\n", projectName)
+	fmt.Printf("Project %q initialized successfully.\n", project.Name)
+	return nil
 }
 
 // pathExists returns true if the path exists.
