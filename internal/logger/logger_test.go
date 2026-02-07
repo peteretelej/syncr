@@ -153,6 +153,85 @@ func TestTimestampFormat(t *testing.T) {
 	}
 }
 
+func TestCleanOldLogs(t *testing.T) {
+	tmpDir := t.TempDir()
+	syncrDir := filepath.Join(tmpDir, "_syncr")
+	logDir := filepath.Join(syncrDir, "logs")
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a recent log file (today)
+	recentFile := filepath.Join(logDir, "syncr_recent.log")
+	if err := os.WriteFile(recentFile, []byte("recent log"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create an old log file and backdate its mod time to 10 days ago
+	oldFile := filepath.Join(logDir, "syncr_old.log")
+	if err := os.WriteFile(oldFile, []byte("old log"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	oldTime := time.Now().AddDate(0, 0, -10)
+	if err := os.Chtimes(oldFile, oldTime, oldTime); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run cleanup directly
+	l := &Logger{logDir: logDir}
+	l.cleanOldLogs()
+
+	// Old file should be deleted
+	if _, err := os.Stat(oldFile); !os.IsNotExist(err) {
+		t.Error("old log file should have been deleted")
+	}
+
+	// Recent file should remain
+	if _, err := os.Stat(recentFile); err != nil {
+		t.Error("recent log file should still exist")
+	}
+}
+
+func TestCleanOldLogs_KeepsBorderlineFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	logDir := filepath.Join(tmpDir, "logs")
+	if err := os.MkdirAll(logDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// File from exactly 6 days ago (within 7-day window)
+	recentEnough := filepath.Join(logDir, "syncr_6days.log")
+	if err := os.WriteFile(recentEnough, []byte("data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	sixDaysAgo := time.Now().AddDate(0, 0, -6)
+	os.Chtimes(recentEnough, sixDaysAgo, sixDaysAgo)
+
+	// File from exactly 8 days ago (outside window)
+	tooOld := filepath.Join(logDir, "syncr_8days.log")
+	if err := os.WriteFile(tooOld, []byte("data"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	eightDaysAgo := time.Now().AddDate(0, 0, -8)
+	os.Chtimes(tooOld, eightDaysAgo, eightDaysAgo)
+
+	l := &Logger{logDir: logDir}
+	l.cleanOldLogs()
+
+	if _, err := os.Stat(recentEnough); err != nil {
+		t.Error("6-day-old file should be kept")
+	}
+	if _, err := os.Stat(tooOld); !os.IsNotExist(err) {
+		t.Error("8-day-old file should be deleted")
+	}
+}
+
+func TestCleanOldLogs_NoLogDir(t *testing.T) {
+	// Should not panic when logDir is empty
+	l := &Logger{logDir: ""}
+	l.cleanOldLogs() // no-op, just ensure no panic
+}
+
 func TestClose(t *testing.T) {
 	tmpDir := t.TempDir()
 	syncrDir := filepath.Join(tmpDir, "_syncr")
