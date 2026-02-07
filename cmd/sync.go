@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/peteretelej/syncr/internal/config"
+	"github.com/peteretelej/syncr/internal/progress"
 	"github.com/peteretelej/syncr/internal/state"
 	"github.com/peteretelej/syncr/internal/sync"
 )
@@ -58,23 +59,13 @@ func Sync(args []string, configPath string, verbose, dryRun bool) {
 		return
 	}
 
-	if len(args) > 0 {
-		fmt.Printf("Syncing project: %s\n", args[0])
-	} else {
-		fmt.Printf("Syncing %d enabled project(s)...\n", len(projectsToSync))
-	}
-
-	if dryRun {
-		fmt.Println("[DRY-RUN mode enabled]")
-	}
-	fmt.Println()
-
 	// Sync each project
+	prog := progress.New(os.Stdout, dryRun, verbose)
 	var successCount, failCount, skippedCount int
 	ctx := context.Background()
 
 	for _, project := range projectsToSync {
-		result := syncProject(ctx, cfg, st, project, verbose, dryRun)
+		result := syncProject(ctx, cfg, st, project, verbose, dryRun, prog)
 		switch result {
 		case "success":
 			successCount++
@@ -109,18 +100,18 @@ func Sync(args []string, configPath string, verbose, dryRun bool) {
 }
 
 // syncProject syncs a single project and returns "success", "failed", or "skipped".
-func syncProject(ctx context.Context, cfg *config.Config, st *state.State, project *config.Project, verbose, dryRun bool) string {
+func syncProject(ctx context.Context, cfg *config.Config, st *state.State, project *config.Project, verbose, dryRun bool, prog *progress.Progress) string {
 	// Check if initialized
 	if !st.IsInitialized(project.Name) {
-		fmt.Printf("  %s: skipped (not initialized, run: syncr init %s)\n", project.Name, project.Name)
+		prog.Skip(project.Name, fmt.Sprintf("not initialized, run: syncr init %s", project.Name))
 		return "skipped"
 	}
 
 	// Check for too many consecutive errors
 	ps := st.GetProject(project.Name)
 	if ps.ErrorCount >= MaxConsecutiveErrors {
-		fmt.Printf("  %s: skipped (%d consecutive errors)\n", project.Name, ps.ErrorCount)
-		fmt.Printf("    Fix: Run 'syncr init %s --force' to re-initialize\n", project.Name)
+		prog.Skip(project.Name, fmt.Sprintf("%d consecutive errors", ps.ErrorCount))
+		prog.Detail("Fix: Run 'syncr init %s --force' to re-initialize", project.Name)
 		return "skipped"
 	}
 
@@ -128,18 +119,22 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 
 	// Check paths exist with actionable error messages
 	if !pathExists(project.LocalPath) {
-		fmt.Printf("  %s: failed (local path missing: %s)\n", project.Name, project.LocalPath)
-		fmt.Printf("    Fix: Ensure the directory exists or update config\n")
+		prog.Start(project.Name)
+		prog.Fail(fmt.Errorf("local path missing: %s", project.LocalPath), project.LocalPath, syncPath)
+		prog.Detail("Fix: Ensure the directory exists or update config")
 		st.RecordError(project.Name, fmt.Errorf("local path missing: %s", project.LocalPath))
 		return "failed"
 	}
 
 	if !pathExists(syncPath) {
-		fmt.Printf("  %s: failed (cloud path missing: %s)\n", project.Name, syncPath)
-		fmt.Printf("    Fix: Run 'syncr init %s' to create it\n", project.Name)
+		prog.Start(project.Name)
+		prog.Fail(fmt.Errorf("cloud path missing: %s", syncPath), project.LocalPath, syncPath)
+		prog.Detail("Fix: Run 'syncr init %s' to create it", project.Name)
 		st.RecordError(project.Name, fmt.Errorf("cloud path missing: %s", syncPath))
 		return "failed"
 	}
+
+	prog.Start(project.Name)
 
 	start := time.Now()
 
@@ -154,15 +149,15 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 	duration := time.Since(start)
 
 	if err != nil {
-		fmt.Printf("  %s: failed (%v)\n", project.Name, err)
+		prog.Fail(err, project.LocalPath, syncPath)
 		if !dryRun {
 			st.RecordError(project.Name, err)
 
 			// Check if this pushes us over the error threshold
 			newErrorCount := st.GetProject(project.Name).ErrorCount
 			if newErrorCount >= MaxConsecutiveErrors {
-				fmt.Printf("    Warning: %d consecutive errors\n", newErrorCount)
-				fmt.Printf("    Suggestion: Run 'syncr init %s --force' to re-initialize\n", project.Name)
+				prog.Detail("Warning: %d consecutive errors", newErrorCount)
+				prog.Detail("Suggestion: Run 'syncr init %s --force' to re-initialize", project.Name)
 			}
 		}
 		return "failed"
@@ -172,12 +167,12 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 	conflictCount, _ := sync.CountConflicts(syncPath)
 
 	if conflictCount > 0 {
-		fmt.Printf("  %s: synced with %d conflict(s) (%v)\n", project.Name, conflictCount, duration.Round(time.Millisecond))
+		prog.Done(duration, conflictCount)
 		if !dryRun {
 			st.RecordConflicts(project.Name, conflictCount)
 		}
 	} else {
-		fmt.Printf("  %s: synced (%v)\n", project.Name, duration.Round(time.Millisecond))
+		prog.Done(duration, 0)
 		if !dryRun {
 			st.RecordSuccess(project.Name)
 		}
