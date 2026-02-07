@@ -41,6 +41,10 @@ func main() {
 		cmd.Status(configPath)
 	case "config":
 		cmd.ShowConfig(configPath)
+	case "enable":
+		cmd.SetProjectEnabled(args[1:], configPath, true)
+	case "disable":
+		cmd.SetProjectEnabled(args[1:], configPath, false)
 	case "version":
 		cmd.Version(version, commit)
 	case "help":
@@ -59,13 +63,15 @@ Usage:
   syncr <command> [options]
 
 Commands:
-  init <project>    Initialize a project (required before first sync)
-  sync [project]    Run sync once (all projects if no name given)
-  daemon            Run continuous sync daemon
-  status            Show status of all projects
-  config            Show current configuration
-  version           Show version information
-  help              Show this help message
+  init <project>      Initialize a project (required before first sync)
+  sync [project]      Run sync once (all projects if no name given)
+  daemon              Run continuous sync daemon
+  status              Show status of all projects
+  config              Show current configuration
+  enable <project>    Enable a project for syncing
+  disable <project>   Disable a project from syncing
+  version             Show version information
+  help                Show this help message
 
 Options:
   -config, -c string  Path to config file (default: ./syncr.json)
@@ -77,5 +83,7 @@ Examples:
   syncr sync                  Sync all enabled projects
   syncr sync MyProject        Sync specific project
   syncr daemon                Run continuous sync every 5 minutes
-  syncr status                Show project status and conflicts`)
+  syncr status                Show project status and conflicts
+  syncr enable MyProject      Enable a project for syncing
+  syncr disable MyProject     Disable a project from syncing`)
 }
