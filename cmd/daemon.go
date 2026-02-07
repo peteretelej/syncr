@@ -54,6 +54,11 @@ func Daemon(configPath string, verbose bool) {
 
 	// Calculate sync interval
 	interval := time.Duration(cfg.SyncIntervalSeconds) * time.Second
+	oldInterval := cfg.SyncIntervalSeconds
+
+	// Track config file modification time for reload detection
+	resolvedConfigPath := cfg.Path()
+	lastModTime, _ := configModTime(resolvedConfigPath)
 
 	// Count enabled projects
 	enabledCount := 0
@@ -83,6 +88,18 @@ func Daemon(configPath string, verbose bool) {
 	for {
 		select {
 		case <-ticker.C:
+			// Check for config changes
+			cfg, lastModTime = maybeReloadConfig(resolvedConfigPath, cfg, lastModTime, log)
+
+			// Reset ticker if interval changed
+			if cfg.SyncIntervalSeconds != oldInterval {
+				ticker.Reset(time.Duration(cfg.SyncIntervalSeconds) * time.Second)
+				log.Info("Sync interval changed: %v -> %v",
+					time.Duration(oldInterval)*time.Second,
+					time.Duration(cfg.SyncIntervalSeconds)*time.Second)
+				oldInterval = cfg.SyncIntervalSeconds
+			}
+
 			log.Info("Running scheduled sync...")
 			runDaemonSync(cfg, st, log)
 
@@ -91,6 +108,51 @@ func Daemon(configPath string, verbose bool) {
 			return
 		}
 	}
+}
+
+// configModTime returns the modification time of the given file path.
+func configModTime(path string) (time.Time, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return info.ModTime(), nil
+}
+
+// maybeReloadConfig checks if the config file has been modified and reloads it if so.
+// Returns the config to use (new or current) and the updated mod time.
+// If the config file is inaccessible or the new config is invalid, the current config is kept.
+func maybeReloadConfig(configPath string, current *config.Config, lastModTime time.Time, log *logger.Logger) (*config.Config, time.Time) {
+	modTime, err := configModTime(configPath)
+	if err != nil {
+		log.Warn("Cannot stat config file (keeping previous config): %v", err)
+		return current, lastModTime
+	}
+
+	if modTime.Equal(lastModTime) {
+		return current, lastModTime
+	}
+
+	newCfg, err := config.Load(configPath)
+	if err != nil {
+		log.Error("Config reload failed (keeping previous config): %v", err)
+		return current, modTime
+	}
+
+	if err := newCfg.Validate(); err != nil {
+		log.Error("Config reload failed (keeping previous config): %v", err)
+		return current, modTime
+	}
+
+	enabledCount := 0
+	for _, p := range newCfg.Projects {
+		if p.Enabled {
+			enabledCount++
+		}
+	}
+	log.Info("Config reloaded: %d projects (%d enabled)", len(newCfg.Projects), enabledCount)
+
+	return newCfg, modTime
 }
 
 // MaxConsecutiveErrors is the threshold after which we suggest re-initialization.
