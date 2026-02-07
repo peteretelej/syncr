@@ -13,6 +13,7 @@ import (
 
 	"github.com/rclone/rclone/cmd/bisync"
 	"github.com/rclone/rclone/fs"
+	"github.com/rclone/rclone/fs/config"
 	"github.com/rclone/rclone/fs/config/configfile"
 )
 
@@ -60,7 +61,8 @@ func Init() error {
 		return nil
 	}
 
-	// Initialize rclone config (in-memory, no config file needed for local-to-local)
+	// Use in-memory config only - no rclone.conf needed for local-to-local sync
+	config.SetConfigPath("")
 	configfile.Install()
 
 	initialized = true
