@@ -337,6 +337,19 @@ func TestValidate_EmptySyncPath(t *testing.T) {
 	}
 }
 
+func TestStateDir(t *testing.T) {
+	dir, err := StateDir()
+	if err != nil {
+		t.Fatalf("StateDir() error = %v", err)
+	}
+	if dir == "" {
+		t.Fatal("StateDir() returned empty string")
+	}
+	if filepath.Base(dir) != "syncr" {
+		t.Errorf("StateDir() = %q, want path ending in /syncr", dir)
+	}
+}
+
 // TestIsOverlappingPath tests the path overlap detection with various path formats.
 func TestIsOverlappingPath(t *testing.T) {
 	tests := []struct {

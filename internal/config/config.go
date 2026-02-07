@@ -159,6 +159,16 @@ func (c *Config) Path() string {
 	return c.path
 }
 
+// StateDir returns the local, per-machine directory for state storage.
+// Uses os.UserConfigDir() so state does not travel with cloud-synced data.
+func StateDir() (string, error) {
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		return "", fmt.Errorf("determining config directory: %w", err)
+	}
+	return filepath.Join(configDir, "syncr"), nil
+}
+
 // SyncrDataDir returns the path to the _syncr metadata directory.
 func (c *Config) SyncrDataDir() string {
 	return filepath.Join(c.SyncRoot, "_syncr")

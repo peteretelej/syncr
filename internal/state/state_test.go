@@ -8,6 +8,88 @@ import (
 	"testing"
 )
 
+func TestMigrateIfNeeded_NoOldState(t *testing.T) {
+	stateDir := filepath.Join(t.TempDir(), "state")
+	cloudDir := filepath.Join(t.TempDir(), "cloud")
+	// Neither directory exists - fresh install
+	if err := MigrateIfNeeded(stateDir, cloudDir); err != nil {
+		t.Fatalf("MigrateIfNeeded() error = %v", err)
+	}
+	// Local state should not exist
+	if _, err := os.Stat(filepath.Join(stateDir, "state.json")); !os.IsNotExist(err) {
+		t.Error("state.json should not exist after no-op migration")
+	}
+}
+
+func TestMigrateIfNeeded_CopiesFromCloud(t *testing.T) {
+	stateDir := filepath.Join(t.TempDir(), "state")
+	cloudDir := filepath.Join(t.TempDir(), "cloud")
+	if err := os.MkdirAll(cloudDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write old cloud state
+	oldContent := `{"version":1,"machine_id":"old-host","projects":{"proj":{"initialized":true,"sync_count":10}}}`
+	if err := os.WriteFile(filepath.Join(cloudDir, "state.json"), []byte(oldContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := MigrateIfNeeded(stateDir, cloudDir); err != nil {
+		t.Fatalf("MigrateIfNeeded() error = %v", err)
+	}
+
+	// Local state should now exist with same content
+	data, err := os.ReadFile(filepath.Join(stateDir, "state.json"))
+	if err != nil {
+		t.Fatalf("reading migrated state: %v", err)
+	}
+	if string(data) != oldContent {
+		t.Errorf("migrated content = %q, want %q", string(data), oldContent)
+	}
+}
+
+func TestMigrateIfNeeded_LocalExists(t *testing.T) {
+	stateDir := filepath.Join(t.TempDir(), "state")
+	cloudDir := filepath.Join(t.TempDir(), "cloud")
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cloudDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	localContent := `{"version":1,"machine_id":"local","projects":{}}`
+	cloudContent := `{"version":1,"machine_id":"cloud","projects":{"old":{"initialized":true}}}`
+	if err := os.WriteFile(filepath.Join(stateDir, "state.json"), []byte(localContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cloudDir, "state.json"), []byte(cloudContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := MigrateIfNeeded(stateDir, cloudDir); err != nil {
+		t.Fatalf("MigrateIfNeeded() error = %v", err)
+	}
+
+	// Local state should be unchanged (not overwritten by cloud)
+	data, err := os.ReadFile(filepath.Join(stateDir, "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != localContent {
+		t.Errorf("local state was overwritten; got %q, want %q", string(data), localContent)
+	}
+}
+
+func TestMigrateIfNeeded_NoCloudDir(t *testing.T) {
+	stateDir := filepath.Join(t.TempDir(), "state")
+	cloudDir := filepath.Join(t.TempDir(), "nonexistent")
+	// Cloud dir doesn't exist at all
+	if err := MigrateIfNeeded(stateDir, cloudDir); err != nil {
+		t.Fatalf("MigrateIfNeeded() error = %v", err)
+	}
+}
+
 func TestLoad_NewState(t *testing.T) {
 	tmpDir := t.TempDir()
 	syncrDir := filepath.Join(tmpDir, "_syncr")

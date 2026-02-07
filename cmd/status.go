@@ -21,7 +21,7 @@ func Status(configPath string) {
 	}
 
 	// Load state
-	st, err := state.Load(cfg.SyncrDataDir())
+	st, err := state.LoadWithMigration(cfg.SyncrDataDir())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading state: %v\n", err)
 		os.Exit(1)

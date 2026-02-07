@@ -1,6 +1,5 @@
 // Package state manages sync state tracking for projects.
-// State is stored in {sync_root}/_syncr/state.json so it travels with the data
-// and is accessible from any machine.
+// State is stored locally in {UserConfigDir}/syncr/state.json, per-machine.
 package state
 
 import (
@@ -10,10 +9,12 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/peteretelej/syncr/internal/config"
 )
 
 // State tracks project initialization and sync history.
-// It is stored at {sync_root}/_syncr/state.json so it travels with the data.
+// It is stored locally at {UserConfigDir}/syncr/state.json, per-machine.
 type State struct {
 	Version   int                     `json:"version"`
 	MachineID string                  `json:"machine_id"`
@@ -36,15 +37,55 @@ type ProjectState struct {
 
 const stateVersion = 1
 
-// Load loads state from the _syncr directory.
-// Creates the directory and an empty state file if they don't exist.
-func Load(syncrDataDir string) (*State, error) {
-	// Ensure _syncr directory exists
-	if err := os.MkdirAll(syncrDataDir, 0755); err != nil {
-		return nil, fmt.Errorf("creating syncr data dir: %w", err)
+// MigrateIfNeeded copies state.json from the old cloud-synced _syncr directory
+// to the local state directory, if the local copy does not yet exist.
+// This is a no-op if local state already exists or if there is no old state.
+func MigrateIfNeeded(stateDir, oldCloudDataDir string) error {
+	localPath := filepath.Join(stateDir, "state.json")
+	if _, err := os.Stat(localPath); err == nil {
+		return nil // local state already exists
 	}
 
-	statePath := filepath.Join(syncrDataDir, "state.json")
+	oldPath := filepath.Join(oldCloudDataDir, "state.json")
+	data, err := os.ReadFile(oldPath)
+	if err != nil {
+		return nil // no old state to migrate (or dir missing)
+	}
+
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		return fmt.Errorf("creating state directory: %w", err)
+	}
+
+	if err := os.WriteFile(localPath, data, 0644); err != nil {
+		return fmt.Errorf("writing migrated state: %w", err)
+	}
+
+	fmt.Println("Migrated state from cloud storage to local directory")
+	return nil
+}
+
+// LoadWithMigration resolves the local state directory, migrates old cloud state
+// if needed, and loads the state. This is the standard entry point for commands.
+func LoadWithMigration(syncrDataDir string) (*State, error) {
+	stateDir, err := config.StateDir()
+	if err != nil {
+		return nil, fmt.Errorf("resolving state directory: %w", err)
+	}
+	if err := MigrateIfNeeded(stateDir, syncrDataDir); err != nil {
+		return nil, fmt.Errorf("migrating state: %w", err)
+	}
+	return Load(stateDir)
+}
+
+// Load loads state from the given directory.
+// Creates the directory and an empty state file if they don't exist.
+func Load(stateDir string) (*State, error) {
+	// Ensure state directory exists
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		return nil, fmt.Errorf("creating state dir: %w", err)
+	}
+
+	statePath := filepath.Join(stateDir, "state.json")
 
 	// Get machine ID
 	hostname, err := os.Hostname()
