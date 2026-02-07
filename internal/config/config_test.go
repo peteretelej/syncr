@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -390,6 +391,269 @@ func TestIsOverlappingPath(t *testing.T) {
 				t.Errorf("isOverlappingPath(%q, %q) = %v, want %v", p1, p2, got, tt.expected)
 			}
 		})
+	}
+}
+
+func TestValidationResult_OK(t *testing.T) {
+	tests := []struct {
+		name string
+		vr   ValidationResult
+		want bool
+	}{
+		{"no issues", ValidationResult{}, true},
+		{"warnings only", ValidationResult{Warnings: []string{"warn"}}, true},
+		{"errors only", ValidationResult{Errors: []string{"err"}}, false},
+		{"both", ValidationResult{Errors: []string{"err"}, Warnings: []string{"warn"}}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.vr.OK(); got != tt.want {
+				t.Errorf("OK() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidationResult_HasIssues(t *testing.T) {
+	tests := []struct {
+		name string
+		vr   ValidationResult
+		want bool
+	}{
+		{"no issues", ValidationResult{}, false},
+		{"warnings only", ValidationResult{Warnings: []string{"warn"}}, true},
+		{"errors only", ValidationResult{Errors: []string{"err"}}, true},
+		{"both", ValidationResult{Errors: []string{"err"}, Warnings: []string{"warn"}}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.vr.HasIssues(); got != tt.want {
+				t.Errorf("HasIssues() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateFull_ValidConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	localDir := filepath.Join(tmpDir, "local")
+	cloudDir := filepath.Join(tmpDir, "myproject")
+	os.MkdirAll(localDir, 0755)
+	os.MkdirAll(cloudDir, 0755)
+
+	cfg := Config{
+		SyncRoot:            tmpDir,
+		SyncIntervalSeconds: 300,
+		Projects: []Project{
+			{Name: "myproject", LocalPath: localDir, SyncPath: "myproject", Enabled: true},
+		},
+	}
+
+	result := cfg.ValidateFull()
+	if len(result.Errors) > 0 {
+		t.Errorf("expected no errors, got %v", result.Errors)
+	}
+	if len(result.Warnings) > 0 {
+		t.Errorf("expected no warnings, got %v", result.Warnings)
+	}
+}
+
+func TestValidateFull_MissingSyncRoot(t *testing.T) {
+	cfg := Config{
+		SyncRoot:            "",
+		SyncIntervalSeconds: 300,
+	}
+	result := cfg.ValidateFull()
+	if len(result.Errors) == 0 {
+		t.Fatal("expected error for missing sync_root")
+	}
+	if result.Errors[0] != "sync_root is required" {
+		t.Errorf("unexpected error: %s", result.Errors[0])
+	}
+}
+
+func TestValidateFull_RelativeSyncRoot(t *testing.T) {
+	cfg := Config{
+		SyncRoot:            "relative/path",
+		SyncIntervalSeconds: 300,
+	}
+	result := cfg.ValidateFull()
+	if len(result.Errors) == 0 {
+		t.Fatal("expected error for relative sync_root")
+	}
+	if result.Errors[0] != "sync_root must be an absolute path" {
+		t.Errorf("unexpected error: %s", result.Errors[0])
+	}
+}
+
+func TestValidateFull_NonexistentSyncRoot(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := Config{
+		SyncRoot:            filepath.Join(tmpDir, "nonexistent"),
+		SyncIntervalSeconds: 300,
+	}
+	result := cfg.ValidateFull()
+	// Should be a warning, not an error
+	if len(result.Errors) != 0 {
+		t.Errorf("expected no errors for nonexistent sync_root, got %v", result.Errors)
+	}
+	if len(result.Warnings) == 0 {
+		t.Fatal("expected warning for nonexistent sync_root")
+	}
+	found := false
+	for _, w := range result.Warnings {
+		if w == fmt.Sprintf("sync_root directory does not exist: %s", filepath.Join(tmpDir, "nonexistent")) {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected sync_root warning, got %v", result.Warnings)
+	}
+}
+
+func TestValidateFull_IntervalBelowMinimum(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := Config{
+		SyncRoot:            tmpDir,
+		SyncIntervalSeconds: 30,
+	}
+	result := cfg.ValidateFull()
+	if len(result.Errors) == 0 {
+		t.Fatal("expected error for interval below minimum")
+	}
+	found := false
+	for _, e := range result.Errors {
+		if e == "sync_interval_seconds must be at least 60" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected interval error, got %v", result.Errors)
+	}
+}
+
+func TestValidateFull_DuplicateProjectNames(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := Config{
+		SyncRoot:            tmpDir,
+		SyncIntervalSeconds: 300,
+		Projects: []Project{
+			{Name: "dup", LocalPath: tmpDir, SyncPath: "a", Enabled: true},
+			{Name: "dup", LocalPath: tmpDir, SyncPath: "b", Enabled: true},
+		},
+	}
+	result := cfg.ValidateFull()
+	found := false
+	for _, e := range result.Errors {
+		if e == "duplicate project name: dup" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected duplicate name error, got %v", result.Errors)
+	}
+}
+
+func TestValidateFull_OverlappingSyncPaths(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := Config{
+		SyncRoot:            tmpDir,
+		SyncIntervalSeconds: 300,
+		Projects: []Project{
+			{Name: "parent", LocalPath: tmpDir, SyncPath: "work", Enabled: true},
+			{Name: "child", LocalPath: tmpDir, SyncPath: "work/sub", Enabled: true},
+		},
+	}
+	result := cfg.ValidateFull()
+	found := false
+	for _, e := range result.Errors {
+		if e == `overlapping sync_path: "work/sub" and "work" would conflict` {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected overlapping sync_path error, got %v", result.Errors)
+	}
+}
+
+func TestValidateFull_NonexistentLocalPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := Config{
+		SyncRoot:            tmpDir,
+		SyncIntervalSeconds: 300,
+		Projects: []Project{
+			{Name: "proj", LocalPath: filepath.Join(tmpDir, "nope"), SyncPath: "proj", Enabled: true},
+		},
+	}
+	result := cfg.ValidateFull()
+	found := false
+	for _, w := range result.Warnings {
+		if w == fmt.Sprintf("project proj: local_path does not exist: %s", filepath.Join(tmpDir, "nope")) {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected local_path warning, got warnings: %v", result.Warnings)
+	}
+}
+
+func TestValidateFull_NonexistentCloudPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	localDir := filepath.Join(tmpDir, "local")
+	os.MkdirAll(localDir, 0755)
+
+	cfg := Config{
+		SyncRoot:            tmpDir,
+		SyncIntervalSeconds: 300,
+		Projects: []Project{
+			{Name: "proj", LocalPath: localDir, SyncPath: "proj", Enabled: true},
+		},
+	}
+	result := cfg.ValidateFull()
+	found := false
+	cloudPath := filepath.Join(tmpDir, "proj")
+	for _, w := range result.Warnings {
+		if w == fmt.Sprintf("project proj: cloud path does not exist: %s", cloudPath) {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected cloud path warning, got warnings: %v", result.Warnings)
+	}
+}
+
+func TestValidateFull_NoEnabledProjects(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := Config{
+		SyncRoot:            tmpDir,
+		SyncIntervalSeconds: 300,
+		Projects: []Project{
+			{Name: "proj", LocalPath: tmpDir, SyncPath: "proj", Enabled: false},
+		},
+	}
+	result := cfg.ValidateFull()
+	found := false
+	for _, w := range result.Warnings {
+		if w == "no enabled projects" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'no enabled projects' warning, got warnings: %v", result.Warnings)
+	}
+}
+
+func TestValidateFull_MultipleIssues(t *testing.T) {
+	cfg := Config{
+		SyncRoot:            "",
+		SyncIntervalSeconds: 10,
+		Projects: []Project{
+			{Name: "", LocalPath: "", Enabled: false},
+		},
+	}
+	result := cfg.ValidateFull()
+	if len(result.Errors) < 3 {
+		t.Errorf("expected at least 3 errors (sync_root, interval, project name), got %d: %v", len(result.Errors), result.Errors)
 	}
 }
 

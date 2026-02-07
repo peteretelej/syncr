@@ -39,4 +39,19 @@ func ShowConfig(configPath string) {
 		fmt.Printf("    cloud:  %s\n", p.SyncPath)
 		fmt.Println()
 	}
+
+	// Run full validation and display issues
+	result := cfg.ValidateFull()
+	if result.HasIssues() {
+		fmt.Println("Validation:")
+		for _, e := range result.Errors {
+			fmt.Printf("  ERROR  %s\n", e)
+		}
+		for _, w := range result.Warnings {
+			fmt.Printf("  WARN   %s\n", w)
+		}
+	}
+	if !result.OK() {
+		os.Exit(1)
+	}
 }

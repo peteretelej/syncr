@@ -10,6 +10,22 @@ import (
 	"path/filepath"
 )
 
+// ValidationResult holds categorized validation results.
+type ValidationResult struct {
+	Errors   []string // Fatal issues that prevent syncing
+	Warnings []string // Non-fatal issues the user should be aware of
+}
+
+// OK returns true if there are no errors (warnings are acceptable).
+func (v ValidationResult) OK() bool {
+	return len(v.Errors) == 0
+}
+
+// HasIssues returns true if there are any errors or warnings.
+func (v ValidationResult) HasIssues() bool {
+	return len(v.Errors) > 0 || len(v.Warnings) > 0
+}
+
 // Config represents the syncr configuration.
 type Config struct {
 	SyncRoot            string    `json:"sync_root"`
@@ -152,6 +168,116 @@ func isOverlappingPath(path1, path2 string) bool {
 // hasPathPrefix checks if path starts with prefix (using path separators).
 func hasPathPrefix(path, prefix string) bool {
 	return len(path) >= len(prefix) && path[:len(prefix)] == prefix
+}
+
+// isDirWritable checks if a directory is writable by creating and removing a temp file.
+func isDirWritable(path string) bool {
+	tmp := filepath.Join(path, ".syncr_write_test")
+	f, err := os.Create(tmp)
+	if err != nil {
+		return false
+	}
+	f.Close()
+	os.Remove(tmp)
+	return true
+}
+
+// ValidateFull performs comprehensive validation, collecting all issues rather
+// than returning on the first error. Structural errors are checked first,
+// then filesystem warnings. The existing Validate() method is unchanged.
+func (c *Config) ValidateFull() ValidationResult {
+	var result ValidationResult
+
+	// Structural errors
+	if c.SyncRoot == "" {
+		result.Errors = append(result.Errors, "sync_root is required")
+	} else if !filepath.IsAbs(c.SyncRoot) {
+		result.Errors = append(result.Errors, "sync_root must be an absolute path")
+	}
+
+	if c.SyncIntervalSeconds < 60 {
+		result.Errors = append(result.Errors, "sync_interval_seconds must be at least 60")
+	}
+
+	names := make(map[string]bool)
+	syncPaths := make([]string, 0, len(c.Projects))
+	enabledCount := 0
+
+	for _, p := range c.Projects {
+		if p.Name == "" {
+			result.Errors = append(result.Errors, "project name is required")
+			continue
+		}
+		if names[p.Name] {
+			result.Errors = append(result.Errors, fmt.Sprintf("duplicate project name: %s", p.Name))
+			continue
+		}
+		names[p.Name] = true
+
+		if p.Enabled {
+			enabledCount++
+		}
+
+		if p.LocalPath == "" {
+			result.Errors = append(result.Errors, fmt.Sprintf("project %s: local_path is required", p.Name))
+		} else if !filepath.IsAbs(p.LocalPath) {
+			result.Errors = append(result.Errors, fmt.Sprintf("project %s: local_path must be an absolute path", p.Name))
+		}
+
+		// Check sync_path duplicates and overlaps
+		normalized := filepath.Clean(p.SyncPath)
+		if normalized == "" || normalized == "." {
+			normalized = p.Name
+		}
+
+		for _, existing := range syncPaths {
+			if normalized == existing {
+				result.Errors = append(result.Errors, fmt.Sprintf("duplicate sync_path: %s", p.SyncPath))
+				break
+			}
+			if isOverlappingPath(normalized, existing) {
+				result.Errors = append(result.Errors, fmt.Sprintf("overlapping sync_path: %q and %q would conflict", p.SyncPath, existing))
+				break
+			}
+		}
+		syncPaths = append(syncPaths, normalized)
+	}
+
+	// Filesystem warnings (only if sync_root is a valid absolute path)
+	if c.SyncRoot != "" && filepath.IsAbs(c.SyncRoot) {
+		if info, err := os.Stat(c.SyncRoot); os.IsNotExist(err) {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("sync_root directory does not exist: %s", c.SyncRoot))
+		} else if err == nil && info.IsDir() && !isDirWritable(c.SyncRoot) {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("sync_root directory is not writable: %s", c.SyncRoot))
+		}
+	}
+
+	for _, p := range c.Projects {
+		if p.Name == "" || p.LocalPath == "" || !filepath.IsAbs(p.LocalPath) {
+			continue
+		}
+		if _, err := os.Stat(p.LocalPath); os.IsNotExist(err) {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("project %s: local_path does not exist: %s", p.Name, p.LocalPath))
+		}
+
+		// Check cloud path existence
+		if c.SyncRoot != "" && filepath.IsAbs(c.SyncRoot) {
+			syncPath := filepath.Clean(p.SyncPath)
+			if syncPath == "" || syncPath == "." {
+				syncPath = p.Name
+			}
+			cloudPath := filepath.Join(c.SyncRoot, syncPath)
+			if _, err := os.Stat(cloudPath); os.IsNotExist(err) {
+				result.Warnings = append(result.Warnings, fmt.Sprintf("project %s: cloud path does not exist: %s", p.Name, cloudPath))
+			}
+		}
+	}
+
+	if len(c.Projects) > 0 && enabledCount == 0 {
+		result.Warnings = append(result.Warnings, "no enabled projects")
+	}
+
+	return result
 }
 
 // Path returns the configuration file path.
