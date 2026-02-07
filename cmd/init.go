@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,6 +15,15 @@ import (
 // Init initializes a project for first-time sync.
 func Init(args []string, configPath string, verbose, dryRun bool) {
 	if len(args) == 0 {
+		// No project specified - create starter config if none exists
+		cfgPath := configPath
+		if cfgPath == "" {
+			cfgPath = "syncr.json"
+		}
+		if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
+			createStarterConfig(cfgPath)
+			return
+		}
 		fmt.Fprintln(os.Stderr, "Error: project name required")
 		fmt.Fprintln(os.Stderr, "Usage: syncr init <project>")
 		os.Exit(1)
@@ -187,4 +197,44 @@ func countFiles(path string) int {
 		return nil
 	})
 	return count
+}
+
+// createStarterConfig creates an initial syncr.json with a sample project.
+func createStarterConfig(cfgPath string) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: could not determine working directory: %v\n", err)
+		os.Exit(1)
+	}
+
+	cfg := config.Config{
+		SyncRoot:            cwd,
+		SyncIntervalSeconds: 300,
+		Projects: []config.Project{
+			{
+				Name:      "my-project",
+				LocalPath: filepath.Join(cwd, "my-project"),
+				SyncPath:  "my-project",
+				Enabled:   false,
+			},
+		},
+	}
+
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating config: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := os.WriteFile(cfgPath, data, 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing config: %v\n", err)
+		os.Exit(1)
+	}
+
+	absPath, _ := filepath.Abs(cfgPath)
+	fmt.Printf("Created %s\n\n", absPath)
+	fmt.Println("Next steps:")
+	fmt.Println("  1. Update sync_root to your cloud storage path (e.g. OneDrive, Dropbox)")
+	fmt.Println("  2. Update the sample project or add your own (set enabled: true)")
+	fmt.Println("  3. Run: syncr init <project-name>")
 }
