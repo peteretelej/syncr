@@ -43,6 +43,8 @@ func main() {
 		cmd.ShowConfig(configPath)
 	case "logs":
 		cmd.Logs(args[1:], configPath)
+	case "add":
+		cmd.Add(args[1:], configPath, *verbose, *dryRun)
 	case "enable":
 		cmd.SetProjectEnabled(args[1:], configPath, true)
 	case "disable":
@@ -66,6 +68,7 @@ Usage:
 
 Commands:
   init [project]      Initialize project(s) (all uninitialized if no name given)
+  add <name> [path]   Add a new project interactively
   sync [project]      Run sync once (all projects if no name given)
   daemon              Run continuous sync daemon
   status              Show status of all projects
@@ -84,6 +87,7 @@ Options:
 Examples:
   syncr init                   Initialize all uninitialized enabled projects
   syncr init MyProject        Initialize a specific project
+  syncr add docs ~/Projects/docs   Add and initialize a project
   syncr sync                  Sync all enabled projects
   syncr sync MyProject        Sync specific project
   syncr daemon                Run continuous sync every 5 minutes
