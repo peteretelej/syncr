@@ -9,7 +9,24 @@ permissions:
   contents: write
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run tests
+        run: go test -race ./...
+
   build:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -26,6 +43,8 @@ jobs:
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
       - name: Build binaries
+        env:
+          CGO_ENABLED: 0
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
           COMMIT=$(git rev-parse --short HEAD)
@@ -42,8 +61,8 @@ jobs:
           GOOS=linux GOARCH=arm64 go build -ldflags "${LDFLAGS}" -o dist/syncr-linux-arm64 .
 
           # Windows
-          GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o dist/syncr-x64.exe .
-          GOOS=windows GOARCH=386 go build -ldflags "${LDFLAGS}" -o dist/syncr-32bit.exe .
+          GOOS=windows GOARCH=amd64 go build -ldflags "${LDFLAGS}" -o dist/syncr-windows-x64.exe .
+          GOOS=windows GOARCH=386 go build -ldflags "${LDFLAGS}" -o dist/syncr-windows-32bit.exe .
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
@@ -63,20 +82,27 @@ jobs:
           name: binaries
           path: dist/
 
-      - name: Get version from tag
+      - name: Get MSI version from tag
         id: version
         shell: bash
-        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+        run: |
+          RAW="${GITHUB_REF#refs/tags/v}"
+          NUMERIC="${RAW%%+*}"
+          NUMERIC="${NUMERIC%%-*}"
+          if ! echo "$NUMERIC" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "ERROR: Invalid version for MSI: $NUMERIC (from tag ${GITHUB_REF})"
+            exit 1
+          fi
+          echo "MSI_VERSION=${NUMERIC}.0" >> $GITHUB_OUTPUT
 
       - name: Create MSI (x64)
         run: |
-          $version = "${{ steps.version.outputs.VERSION }}"
+          $msiVersion = "${{ steps.version.outputs.MSI_VERSION }}"
 
-          # Create WiX source for x64
           @"
           <?xml version="1.0" encoding="UTF-8"?>
           <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-            <Product Id="*" Name="syncr" Language="1033" Version="$version.0" Manufacturer="peteretelej" UpgradeCode="8F3E4A2B-1C5D-4E6F-9A8B-7C2D3E4F5A6B">
+            <Product Id="*" Name="syncr" Language="1033" Version="$msiVersion" Manufacturer="peteretelej" UpgradeCode="8F3E4A2B-1C5D-4E6F-9A8B-7C2D3E4F5A6B">
               <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
               <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
               <MediaTemplate EmbedCab="yes" />
@@ -90,7 +116,7 @@ jobs:
               </Directory>
               <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
                 <Component Id="MainExecutable" Guid="*">
-                  <File Id="syncr.exe" Source="dist\syncr-x64.exe" Name="syncr.exe" KeyPath="yes" />
+                  <File Id="syncr.exe" Source="dist\syncr-windows-x64.exe" Name="syncr.exe" KeyPath="yes" />
                   <Environment Id="PATH" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="last" Action="set" System="yes" />
                 </Component>
               </ComponentGroup>
@@ -99,16 +125,16 @@ jobs:
           "@ | Out-File -FilePath syncr-x64.wxs -Encoding UTF8
 
           & "${env:WIX}bin\candle.exe" syncr-x64.wxs -arch x64
-          & "${env:WIX}bin\light.exe" syncr-x64.wixobj -o dist/syncr-x64.msi
+          & "${env:WIX}bin\light.exe" syncr-x64.wixobj -o dist/syncr-windows-x64.msi
 
       - name: Create MSI (32-bit)
         run: |
-          $version = "${{ steps.version.outputs.VERSION }}"
+          $msiVersion = "${{ steps.version.outputs.MSI_VERSION }}"
 
           @"
           <?xml version="1.0" encoding="UTF-8"?>
           <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-            <Product Id="*" Name="syncr" Language="1033" Version="$version.0" Manufacturer="peteretelej" UpgradeCode="8F3E4A2B-1C5D-4E6F-9A8B-7C2D3E4F5A6C">
+            <Product Id="*" Name="syncr" Language="1033" Version="$msiVersion" Manufacturer="peteretelej" UpgradeCode="8F3E4A2B-1C5D-4E6F-9A8B-7C2D3E4F5A6C">
               <Package InstallerVersion="200" Compressed="yes" InstallScope="perMachine" />
               <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
               <MediaTemplate EmbedCab="yes" />
@@ -122,7 +148,7 @@ jobs:
               </Directory>
               <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
                 <Component Id="MainExecutable" Guid="*">
-                  <File Id="syncr.exe" Source="dist\syncr-32bit.exe" Name="syncr.exe" KeyPath="yes" />
+                  <File Id="syncr.exe" Source="dist\syncr-windows-32bit.exe" Name="syncr.exe" KeyPath="yes" />
                   <Environment Id="PATH" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="last" Action="set" System="yes" />
                 </Component>
               </ComponentGroup>
@@ -131,7 +157,7 @@ jobs:
           "@ | Out-File -FilePath syncr-32bit.wxs -Encoding UTF8
 
           & "${env:WIX}bin\candle.exe" syncr-32bit.wxs -arch x86
-          & "${env:WIX}bin\light.exe" syncr-32bit.wixobj -o dist/syncr-32bit.msi
+          & "${env:WIX}bin\light.exe" syncr-32bit.wixobj -o dist/syncr-windows-32bit.msi
 
       - name: Upload MSI artifacts
         uses: actions/upload-artifact@v4
@@ -168,9 +194,9 @@ jobs:
             dist/syncr-macos-arm64
             dist/syncr-linux-x64
             dist/syncr-linux-arm64
-            dist/syncr-x64.exe
-            dist/syncr-32bit.exe
-            dist/syncr-x64.msi
-            dist/syncr-32bit.msi
+            dist/syncr-windows-x64.exe
+            dist/syncr-windows-32bit.exe
+            dist/syncr-windows-x64.msi
+            dist/syncr-windows-32bit.msi
             dist/checksums.txt
           generate_release_notes: true
