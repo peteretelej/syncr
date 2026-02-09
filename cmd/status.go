@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/peteretelej/syncr/internal/config"
@@ -149,15 +148,7 @@ func checkDaemonStatus(syncrDataDir string) string {
 		return "not running"
 	}
 
-	// On Unix, we can check if process exists by sending signal 0
-	process, err := os.FindProcess(pid)
-	if err != nil {
-		return "not running"
-	}
-
-	// Send signal 0 to check if process exists (Unix only)
-	err = process.Signal(syscall.Signal(0))
-	if err != nil {
+	if !isProcessAlive(pid) {
 		return "not running"
 	}
 
