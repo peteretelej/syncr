@@ -120,7 +120,7 @@ func followLogs(logDir string) {
 			today := time.Now().Format("20060102")
 			if today != currentDay {
 				// Read remaining content from old file
-				offset = readNewContent(logDir, currentDay, offset)
+				readNewContent(logDir, currentDay, offset)
 				// Switch to new day
 				currentDay = today
 				offset = 0
