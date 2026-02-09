@@ -8,7 +8,7 @@ Keeps local folders in sync with cloud storage (OneDrive, Dropbox, Google Drive)
 
 - **Bidirectional sync** - changes flow both ways between local and cloud
 - **State tracking** - remembers sync history, detects conflicts
-- **Daemon mode** - continuous background sync
+- **Daemon mode** - continuous background sync with config hot-reload
 - **Multi-project** - sync multiple folders with one config
 - **Cross-platform** - macOS, Linux, Windows
 
@@ -22,28 +22,15 @@ go install github.com/peteretelej/syncr@latest
 
 ## Quick Start
 
-Create `syncr.json` in your working directory:
-
-```json
-{
-  "sync_root": "C:\\Users\\You\\OneDrive\\syncr",
-  "sync_interval_seconds": 300,
-  "projects": [
-    {
-      "name": "docs",
-      "local_path": "C:\\Users\\You\\Projects\\myapp\\docs",
-      "sync_path": "docs",
-      "enabled": true
-    }
-  ]
-}
-```
-
-Then run:
-
 ```bash
-# Initialize project (required before first sync)
-syncr init docs
+# Generate a starter config file
+syncr init
+
+# Edit syncr.json: set sync_root to your cloud storage path,
+# then update the sample project or add your own
+
+# Add a project
+syncr add docs ~/Projects/myapp/docs
 
 # Run sync
 syncr sync
@@ -52,22 +39,46 @@ syncr sync
 syncr daemon
 ```
 
+You can also create `syncr.json` manually:
+
+```json
+{
+  "sync_root": "/Users/You/OneDrive/syncr",
+  "sync_interval_seconds": 300,
+  "projects": [
+    {
+      "name": "docs",
+      "local_path": "/Users/You/Projects/myapp/docs",
+      "sync_path": "docs",
+      "enabled": true
+    }
+  ]
+}
+```
+
+Then initialize and sync:
+
+```bash
+syncr init docs
+syncr sync
+```
+
 ## Configuration
 
 ```json
 {
-  "sync_root": "C:\\Users\\You\\OneDrive\\syncr",
+  "sync_root": "/Users/You/OneDrive/syncr",
   "sync_interval_seconds": 300,
   "projects": [
     {
       "name": "project-docs",
-      "local_path": "C:\\Users\\You\\Projects\\myapp\\docs",
+      "local_path": "/Users/You/Projects/myapp/docs",
       "sync_path": "project-docs",
       "enabled": true
     },
     {
       "name": "notes",
-      "local_path": "C:\\Users\\You\\Notes",
+      "local_path": "/Users/You/Notes",
       "sync_path": "notes",
       "enabled": true
     }
@@ -78,7 +89,7 @@ syncr daemon
 | Field | Description |
 |-------|-------------|
 | `sync_root` | Base path in your cloud storage folder |
-| `sync_interval_seconds` | How often daemon syncs (default: 300) |
+| `sync_interval_seconds` | How often daemon syncs (minimum 60, default 300) |
 | `projects[].name` | Project identifier |
 | `projects[].local_path` | Absolute path to local folder |
 | `projects[].sync_path` | Subfolder name in sync_root |
@@ -87,21 +98,26 @@ syncr daemon
 ## Commands
 
 ```bash
-syncr init <project>     # Initialize project for first sync
-syncr sync               # Sync all enabled projects
-syncr sync <project>     # Sync specific project
-syncr daemon             # Run continuous sync
-syncr status             # Show project status and conflicts
-syncr config             # Show current configuration
-syncr version            # Show version
+syncr init [project]       # Initialize project(s) for first sync
+syncr init                 # Initialize all uninitialized enabled projects
+syncr add <name> [path]    # Add a new project and initialize it
+syncr sync [project]       # Sync all enabled projects (or a specific one)
+syncr daemon               # Run continuous sync
+syncr status               # Show project status and conflicts
+syncr config               # Show current configuration and validation
+syncr logs                 # Show today's log
+syncr logs -f              # Follow log output in real time
+syncr enable <project>     # Enable a project for syncing
+syncr disable <project>    # Disable a project from syncing
+syncr version              # Show version
 ```
 
 ### Options
 
 ```
--config string    Path to config file (default: ./syncr.json)
--verbose          Enable verbose output
--dry-run          Show what would sync without making changes
+-config, -c string    Path to config file (default: ./syncr.json)
+-verbose              Enable verbose output
+-dry-run              Show what would sync without making changes
 ```
 
 ## How It Works
@@ -109,14 +125,15 @@ syncr version            # Show version
 syncr uses rclone's bisync under the hood. Files sync bidirectionally:
 
 ```
-Local Folder                          Cloud Storage
-C:\Users\You\Projects\myapp\docs  <-->  OneDrive\syncr\docs\
+Local Folder                      Cloud Storage
+~/Projects/myapp/docs  <------>  OneDrive/syncr/docs/
 ```
 
-State and logs are stored in `{sync_root}/_syncr/`:
-- `state.json` - sync history, initialization status
-- `logs/` - daily log files
+Sync metadata is stored in `{sync_root}/_syncr/`:
+- `logs/` - daily log files (auto-rotated, 7-day retention)
 - `bisync/` - rclone bisync working data
+
+Sync state (`state.json`) is stored locally per machine in your OS config directory (e.g. `~/.config/syncr/` on Linux/macOS), so each machine tracks its own sync history independently.
 
 ## Initialization
 
@@ -131,6 +148,12 @@ This handles the initial sync based on what exists:
 - **Cloud empty, local has files**: pushes to cloud
 - **Both have files**: merges (keeps superset)
 - **Both empty**: marks initialized, nothing to sync
+
+To initialize all uninitialized enabled projects at once:
+
+```bash
+syncr init
+```
 
 ## Conflicts
 
@@ -165,10 +188,11 @@ syncr/
 ├── main.go              # CLI entry point
 ├── cmd/                 # Command implementations
 ├── internal/
-│   ├── config/          # Configuration loading
+│   ├── config/          # Configuration loading and validation
 │   ├── state/           # Sync state tracking
 │   ├── sync/            # rclone bisync wrapper
-│   └── logger/          # Logging
+│   ├── progress/        # Sync progress output
+│   └── logger/          # Logging with daily rotation
 ├── syncr.example.json   # Example config
 ├── syncr.json           # Your config (create this, gitignored)
 └── tests/               # Integration tests
