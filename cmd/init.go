@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/fatih/color"
 	"github.com/peteretelej/syncr/internal/config"
 	"github.com/peteretelej/syncr/internal/state"
 	"github.com/peteretelej/syncr/internal/sync"
@@ -68,7 +69,7 @@ func Init(args []string, configPath string, verbose, dryRun bool) {
 	}
 
 	if err := initProject(cfg, st, project, verbose, dryRun); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%s\n", color.RedString("Error: %v", err))
 		os.Exit(1)
 	}
 
@@ -122,7 +123,7 @@ func batchInit(configPath string, verbose, dryRun bool) {
 
 	fmt.Printf("Initializing %d uninitialized project(s)...\n", len(uninitialized))
 	if dryRun {
-		fmt.Println("[DRY-RUN mode enabled]")
+		fmt.Println(color.CyanString("[DRY-RUN mode enabled]"))
 	}
 	fmt.Println()
 
@@ -132,7 +133,7 @@ func batchInit(configPath string, verbose, dryRun bool) {
 	for _, project := range uninitialized {
 		err := initProject(cfg, st, project, verbose, dryRun)
 		if err != nil {
-			fmt.Printf("  Error initializing %q: %v\n", project.Name, err)
+			fmt.Printf("  %s\n", color.RedString("Error initializing %q: %v", project.Name, err))
 			failed = append(failed, project.Name)
 		} else {
 			successCount++
@@ -148,9 +149,14 @@ func batchInit(configPath string, verbose, dryRun bool) {
 	}
 
 	// Print summary
-	fmt.Printf("Initialized %d of %d projects\n", successCount, len(uninitialized))
+	total := len(uninitialized)
+	if successCount == total {
+		fmt.Println(color.GreenString("Initialized %d of %d projects", successCount, total))
+	} else {
+		fmt.Println(color.YellowString("Initialized %d of %d projects", successCount, total))
+	}
 	if len(failed) > 0 {
-		fmt.Printf("Failed:")
+		fmt.Printf("%s", color.RedString("Failed:"))
 		for _, name := range failed {
 			fmt.Printf(" %s", name)
 		}
@@ -162,11 +168,12 @@ func batchInit(configPath string, verbose, dryRun bool) {
 // initProject initializes a single project. Returns error instead of calling os.Exit.
 // Does not call st.Save() - the caller is responsible for saving state.
 func initProject(cfg *config.Config, st *state.State, project *config.Project, verbose, dryRun bool) error {
+	dim := color.New(color.Faint)
 	syncPath := filepath.Join(cfg.SyncRoot, project.SyncPath)
 
 	fmt.Printf("Initializing project: %s\n", project.Name)
-	fmt.Printf("  Local:  %s\n", project.LocalPath)
-	fmt.Printf("  Cloud:  %s\n", syncPath)
+	dim.Printf("  Local:  %s\n", project.LocalPath)
+	dim.Printf("  Cloud:  %s\n", syncPath)
 	fmt.Println()
 
 	// Check paths exist, create cloud folder if needed
@@ -180,12 +187,12 @@ func initProject(cfg *config.Config, st *state.State, project *config.Project, v
 	// Create cloud folder if it doesn't exist
 	if !pathExists(syncPath) {
 		if dryRun {
-			fmt.Printf("  [DRY-RUN] Would create cloud folder: %s\n", syncPath)
+			fmt.Printf("  %s Would create cloud folder: %s\n", color.CyanString("[DRY-RUN]"), dim.Sprint(syncPath))
 		} else {
 			if err := os.MkdirAll(syncPath, 0755); err != nil {
 				return fmt.Errorf("creating cloud folder: %v", err)
 			}
-			fmt.Printf("  Created cloud folder: %s\n", syncPath)
+			fmt.Printf("  Created cloud folder: %s\n", dim.Sprint(syncPath))
 		}
 	}
 
@@ -211,11 +218,11 @@ func initProject(cfg *config.Config, st *state.State, project *config.Project, v
 	case localCount == 0 && syncCount == 0:
 		actionDesc = "Both folders are empty. Marking as initialized."
 		if dryRun {
-			fmt.Printf("[DRY-RUN] %s\n", actionDesc)
+			fmt.Printf("%s %s\n", color.CyanString("[DRY-RUN]"), actionDesc)
 		} else {
 			fmt.Println(actionDesc)
 			st.MarkInitialized(project.Name)
-			fmt.Printf("Project %q initialized successfully.\n", project.Name)
+			fmt.Println(color.GreenString("Project %q initialized successfully.", project.Name))
 		}
 		return nil
 	default:
@@ -227,8 +234,8 @@ func initProject(cfg *config.Config, st *state.State, project *config.Project, v
 
 	if dryRun {
 		fmt.Println()
-		fmt.Println("[DRY-RUN] Would run bisync with --resync")
-		fmt.Printf("[DRY-RUN] Would mark project %q as initialized\n", project.Name)
+		fmt.Println(color.CyanString("[DRY-RUN] Would run bisync with --resync"))
+		fmt.Printf("%s\n", color.CyanString("[DRY-RUN] Would mark project %q as initialized", project.Name))
 		return nil
 	}
 
@@ -257,7 +264,7 @@ func initProject(cfg *config.Config, st *state.State, project *config.Project, v
 	st.MarkInitialized(project.Name)
 	st.RecordSuccess(project.Name)
 
-	fmt.Printf("Project %q initialized successfully.\n", project.Name)
+	fmt.Println(color.GreenString("Project %q initialized successfully.", project.Name))
 	return nil
 }
 

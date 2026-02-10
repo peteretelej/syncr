@@ -2,7 +2,10 @@ module github.com/peteretelej/syncr
 
 go 1.25.5
 
-require github.com/rclone/rclone v1.72.1
+require (
+	github.com/fatih/color v1.18.0
+	github.com/rclone/rclone v1.72.1
+)
 
 require (
 	github.com/Max-Sum/base32768 v0.0.0-20230304063302-18e6ce5945fd // indirect

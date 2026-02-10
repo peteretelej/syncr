@@ -111,7 +111,7 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 	ps := st.GetProject(project.Name)
 	if ps.ErrorCount >= MaxConsecutiveErrors {
 		prog.Skip(project.Name, fmt.Sprintf("%d consecutive errors", ps.ErrorCount))
-		prog.Detail("Fix: Run 'syncr init %s --force' to resync (local files are preserved)", project.Name)
+		prog.Hint("Fix: Run 'syncr init %s --force' to resync (local files are preserved)", project.Name)
 		return "skipped"
 	}
 
@@ -121,7 +121,7 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 	if !pathExists(project.LocalPath) {
 		prog.Start(project.Name)
 		prog.Fail(fmt.Errorf("local path missing: %s", project.LocalPath), project.LocalPath, syncPath)
-		prog.Detail("Fix: Ensure the directory exists or update config")
+		prog.Hint("Fix: Ensure the directory exists or update config")
 		st.RecordError(project.Name, fmt.Errorf("local path missing: %s", project.LocalPath))
 		return "failed"
 	}
@@ -129,7 +129,7 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 	if !pathExists(syncPath) {
 		prog.Start(project.Name)
 		prog.Fail(fmt.Errorf("cloud path missing: %s", syncPath), project.LocalPath, syncPath)
-		prog.Detail("Fix: Run 'syncr init %s --force' to recreate cloud folder from local files", project.Name)
+		prog.Hint("Fix: Run 'syncr init %s --force' to recreate cloud folder from local files", project.Name)
 		st.RecordError(project.Name, fmt.Errorf("cloud path missing: %s", syncPath))
 		return "failed"
 	}
@@ -156,8 +156,8 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 			// Check if this pushes us over the error threshold
 			newErrorCount := st.GetProject(project.Name).ErrorCount
 			if newErrorCount >= MaxConsecutiveErrors {
-				prog.Detail("Warning: %d consecutive errors", newErrorCount)
-				prog.Detail("Suggestion: Run 'syncr init %s --force' to resync (local files are preserved)", project.Name)
+				prog.Hint("Warning: %d consecutive errors", newErrorCount)
+				prog.Hint("Suggestion: Run 'syncr init %s --force' to resync (local files are preserved)", project.Name)
 			}
 		}
 		return "failed"

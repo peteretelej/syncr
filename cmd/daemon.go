@@ -81,7 +81,7 @@ func Daemon(configPath string, verbose bool) {
 	defer ticker.Stop()
 
 	// Run initial sync
-	log.Info("Running initial sync...")
+	log.Info("Running initial sync (%d projects)...", enabledCount)
 	runDaemonSync(cfg, st, log)
 
 	// Main loop
@@ -100,7 +100,14 @@ func Daemon(configPath string, verbose bool) {
 				oldInterval = cfg.SyncIntervalSeconds
 			}
 
-			log.Info("Running scheduled sync...")
+			// Count enabled projects (config may have been reloaded)
+			scheduledEnabled := 0
+			for _, p := range cfg.Projects {
+				if p.Enabled {
+					scheduledEnabled++
+				}
+			}
+			log.Info("Running scheduled sync (%d projects)...", scheduledEnabled)
 			runDaemonSync(cfg, st, log)
 
 		case sig := <-sigChan:

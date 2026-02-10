@@ -232,6 +232,45 @@ func TestCleanOldLogs_NoLogDir(t *testing.T) {
 	l.cleanOldLogs() // no-op, just ensure no panic
 }
 
+func TestFileOutputNoANSI(t *testing.T) {
+	tmpDir := t.TempDir()
+	syncrDir := filepath.Join(tmpDir, "_syncr")
+
+	l, err := New(syncrDir, false)
+	if err != nil {
+		t.Fatalf("New() error = %v", err)
+	}
+
+	l.Info("info line")
+	l.Warn("warn line")
+	l.Error("error line")
+	l.Close()
+
+	today := time.Now().Format("20060102")
+	logPath := filepath.Join(syncrDir, "logs", "syncr_"+today+".log")
+
+	content, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("reading log file: %v", err)
+	}
+
+	// ANSI escape codes start with ESC (0x1B)
+	if strings.Contains(string(content), "\x1b") {
+		t.Errorf("log file contains ANSI escape codes: %q", content)
+	}
+
+	// Verify plain level tags are present
+	if !strings.Contains(string(content), "[INFO]") {
+		t.Error("log file should contain [INFO]")
+	}
+	if !strings.Contains(string(content), "[WARN]") {
+		t.Error("log file should contain [WARN]")
+	}
+	if !strings.Contains(string(content), "[ERROR]") {
+		t.Error("log file should contain [ERROR]")
+	}
+}
+
 func TestClose(t *testing.T) {
 	tmpDir := t.TempDir()
 	syncrDir := filepath.Join(tmpDir, "_syncr")

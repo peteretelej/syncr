@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/fatih/color"
 )
 
 // Logger provides human-friendly logging to stdout and file.
@@ -89,25 +91,42 @@ func (l *Logger) Close() error {
 	return nil
 }
 
+// colorizeLevel returns a colored version of the level tag for console output.
+func colorizeLevel(level string) string {
+	switch level {
+	case "ERROR":
+		return color.RedString("[ERROR]")
+	case "WARN":
+		return color.YellowString("[WARN]")
+	case "DEBUG":
+		return color.New(color.Faint).Sprint("[DEBUG]")
+	default:
+		return "[" + level + "]"
+	}
+}
+
 func (l *Logger) log(level, format string, args ...interface{}) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
 	timestamp := time.Now().Format("2006-01-02 15:04:05")
 	msg := fmt.Sprintf(format, args...)
-	line := fmt.Sprintf("[%s] [%s] %s\n", timestamp, level, msg)
 
-	// Write to stdout
-	l.out.Write([]byte(line))
+	// Plain line for file (no ANSI codes)
+	plainLine := fmt.Sprintf("[%s] [%s] %s\n", timestamp, level, msg)
 
-	// Write to file if available
+	// Colored line for console
+	consoleLine := fmt.Sprintf("[%s] %s %s\n", timestamp, colorizeLevel(level), msg)
+
+	// Write colored to console
+	l.out.Write([]byte(consoleLine))
+
+	// Write plain to file if available
 	if l.file != nil {
-		// Check if we need to rotate
 		if err := l.rotateIfNeededLocked(); err != nil {
-			// Log rotation error to stdout only
-			fmt.Fprintf(l.out, "[%s] [ERROR] log rotation failed: %v\n", timestamp, err)
+			fmt.Fprintf(l.out, "[%s] %s log rotation failed: %v\n", timestamp, colorizeLevel("ERROR"), err)
 		}
-		l.file.WriteString(line)
+		l.file.WriteString(plainLine)
 	}
 }
 

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/peteretelej/syncr/internal/config"
 	"github.com/peteretelej/syncr/internal/state"
 	"github.com/peteretelej/syncr/internal/sync"
@@ -72,18 +73,22 @@ func Status(configPath string) {
 		syncPath := filepath.Join(cfg.SyncRoot, project.SyncPath)
 
 		// Determine status
-		var status string
+		var statusPlain string
 		if !project.Enabled {
-			status = "disabled"
+			statusPlain = "disabled"
 		} else if !ps.Initialized {
-			status = "not init"
+			statusPlain = "not init"
 		} else if ps.LastSyncStatus == "error" {
-			status = fmt.Sprintf("error (%d)", ps.ErrorCount)
+			statusPlain = fmt.Sprintf("error (%d)", ps.ErrorCount)
 		} else if ps.LastSyncStatus == "conflicts" {
-			status = "conflicts"
+			statusPlain = "conflicts"
 		} else {
-			status = "synced"
+			statusPlain = "synced"
 		}
+
+		// Pad plain string first, then colorize (ANSI codes break %-*s padding)
+		paddedStatus := fmt.Sprintf("%-12s", statusPlain)
+		coloredStatus := colorizeStatus(paddedStatus, statusPlain)
 
 		// Format last sync time
 		var lastSync string
@@ -109,17 +114,17 @@ func Status(configPath string) {
 
 		conflictStr := "-"
 		if conflictCount > 0 {
-			conflictStr = fmt.Sprintf("%d", conflictCount)
+			conflictStr = color.YellowString("%d", conflictCount)
 		}
 
-		fmt.Printf("  %-*s  %-12s  %-18s  %s\n",
-			maxNameLen, project.Name, status, lastSync, conflictStr)
+		fmt.Printf("  %-*s  %s  %-18s  %s\n",
+			maxNameLen, project.Name, coloredStatus, lastSync, conflictStr)
 	}
 
 	// Show conflict details if any
 	if len(allConflicts) > 0 {
 		fmt.Println()
-		fmt.Println("Conflict files:")
+		fmt.Println(color.YellowString("Conflict files:"))
 		for _, ci := range allConflicts {
 			fmt.Printf("  %s:\n", ci.project)
 			for _, f := range ci.conflicts {
@@ -134,25 +139,42 @@ type conflictInfo struct {
 	conflicts []string
 }
 
+// colorizeStatus applies color to a pre-padded status string based on the plain status value.
+func colorizeStatus(padded, plain string) string {
+	switch {
+	case plain == "synced":
+		return color.GreenString(padded)
+	case plain == "disabled":
+		return color.New(color.Faint).Sprint(padded)
+	case plain == "not init":
+		return color.RedString(padded)
+	case plain == "conflicts":
+		return color.YellowString(padded)
+	case len(plain) >= 5 && plain[:5] == "error":
+		return color.RedString(padded)
+	default:
+		return padded
+	}
+}
+
 // checkDaemonStatus checks if the daemon is running by looking for a PID file.
 func checkDaemonStatus(syncrDataDir string) string {
 	pidFile := filepath.Join(syncrDataDir, "syncr.pid")
 	data, err := os.ReadFile(pidFile)
 	if err != nil {
-		return "not running"
+		return color.New(color.Faint).Sprint("not running")
 	}
 
-	// Check if the process is still running
 	var pid int
 	if _, err := fmt.Sscanf(string(data), "%d", &pid); err != nil {
-		return "not running"
+		return color.New(color.Faint).Sprint("not running")
 	}
 
 	if !isProcessAlive(pid) {
-		return "not running"
+		return color.New(color.Faint).Sprint("not running")
 	}
 
-	return fmt.Sprintf("running (pid %d)", pid)
+	return color.GreenString("running (pid %d)", pid)
 }
 
 // formatRelativeTime formats a time as a relative duration.

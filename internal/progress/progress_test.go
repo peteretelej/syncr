@@ -148,6 +148,40 @@ func TestDryRunVerbose(t *testing.T) {
 	}
 }
 
+func TestConflictsShownWithoutVerbose(t *testing.T) {
+	var buf bytes.Buffer
+	p := New(&buf, false, false)
+	p.Start("foo")
+	p.Done(1*time.Second, 2)
+
+	want := "Syncing foo... done (1.0s)\n  2 conflict(s) detected\n"
+	if got := buf.String(); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestHint(t *testing.T) {
+	var buf bytes.Buffer
+	p := New(&buf, false, false) // verbose=false
+	p.Hint("Run 'syncr init foo --force' to resync")
+
+	want := "  Run 'syncr init foo --force' to resync\n"
+	if got := buf.String(); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+func TestHintFormat(t *testing.T) {
+	var buf bytes.Buffer
+	p := New(&buf, false, false)
+	p.Hint("Fix: %d errors in %s", 3, "myproject")
+
+	want := "  Fix: 3 errors in myproject\n"
+	if got := buf.String(); got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
 func TestFormatDuration(t *testing.T) {
 	tests := []struct {
 		d    time.Duration
