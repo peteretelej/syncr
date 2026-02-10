@@ -84,9 +84,11 @@ func Load(configPath string) (*Config, error) {
 	}
 
 	// Resolve local data directory for per-machine working files
-	if stateDir, err := StateDir(); err == nil {
-		cfg.localDataDir = stateDir
+	dataDir, err := dataDir()
+	if err != nil {
+		return nil, fmt.Errorf("resolving data directory: %w", err)
 	}
+	cfg.localDataDir = dataDir
 
 	return &cfg, nil
 }
@@ -295,25 +297,26 @@ func (c *Config) Path() string {
 	return c.path
 }
 
-// StateDir returns the local, per-machine directory for state storage.
-// Uses os.UserConfigDir() so state does not travel with cloud-synced data.
-func StateDir() (string, error) {
-	configDir, err := os.UserConfigDir()
+// dataDir returns the local, per-machine directory for syncr data
+// (state, logs, bisync working files, PID). Uses ~/.config/syncr which
+// resolves reliably across platforms, including service/daemon contexts
+// where OS-specific config directories may not be available.
+func dataDir() (string, error) {
+	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("determining config directory: %w", err)
+		return "", fmt.Errorf("determining home directory: %w", err)
 	}
-	return filepath.Join(configDir, "syncr"), nil
+	return filepath.Join(home, ".config", "syncr"), nil
 }
 
 // SyncrDataDir returns the local per-machine directory for working files
-// (bisync state, logs, PID file). Falls back to {sync_root}/_syncr if the
-// local directory was not resolved.
+// (bisync state, logs, PID file). Load() guarantees localDataDir is set;
+// panics if called on a Config where it was never resolved (programming error).
 func (c *Config) SyncrDataDir() string {
-	if c.localDataDir != "" {
-		return c.localDataDir
+	if c.localDataDir == "" {
+		panic("syncr: SyncrDataDir called before localDataDir was set (use Load() or SetLocalDataDir())")
 	}
-	// Fallback for manually constructed configs (e.g. tests)
-	return filepath.Join(c.SyncRoot, "_syncr")
+	return c.localDataDir
 }
 
 // SetLocalDataDir overrides the local data directory.

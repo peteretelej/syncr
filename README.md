@@ -155,13 +155,7 @@ Local Folder                      Sync Folder
 
 Your sync folder can be a cloud storage path (OneDrive, Dropbox, Google Drive), a network drive, or any local folder.
 
-**Local storage.** Logs, bisync working data, PID file, and sync state are all stored locally on your machine in your OS config directory, not in the sync folder. This means each machine tracks its own sync history independently.
-
-| OS | Local data path |
-|----|----------------|
-| macOS | `~/Library/Application Support/syncr/` |
-| Linux | `~/.config/syncr/` |
-| Windows | `%AppData%\syncr\` |
+**Local storage.** Logs, bisync working data, PID file, and sync state are all stored locally on your machine at `~/.config/syncr/`, not in the sync folder. This means each machine tracks its own sync history independently.
 
 Within that directory:
 

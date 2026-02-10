@@ -20,7 +20,7 @@ Lightweight bidirectional folder sync. Single Go binary with rclone embedded. Wo
            |
            +---> Config (syncr.json)
            |
-           +---> State ({sync_root}/_syncr/state.json)
+           +---> State (~/.config/syncr/state.json)
            |
            +---> rclone bisync (embedded library)
            |
@@ -38,7 +38,7 @@ Local Folders                Sync Folder
          |
          +---> [rclone bisync - bidirectional]
          |
-         +---> State tracked in _syncr/state.json
+         +---> State tracked in ~/.config/syncr/state.json
 ```
 
 ## Directory Structure
@@ -136,7 +136,7 @@ Responsibilities:
 
 ### internal/state
 
-Sync state tracking. State is stored locally per-machine in `{UserConfigDir}/syncr/`.
+Sync state tracking. State is stored locally per-machine in `~/.config/syncr/`.
 
 ```go
 type State struct {
@@ -267,7 +267,7 @@ Continuous sync loop:
 2. Wait for `sync_interval_minutes`
 3. Sync all enabled, initialized projects
 4. Handle SIGINT/SIGTERM for graceful shutdown
-5. Write PID file to `_syncr/syncr.pid`
+5. Write PID file to `~/.config/syncr/syncr.pid`
 
 Error handling:
 - Skip uninitialized projects

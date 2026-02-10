@@ -15,8 +15,8 @@ syncr daemon (continuous loop)
 internal/sync/bisync.go --> rclone bisync --> sync_root/{project}/
     |
     +-- reads: syncr.json (config)
-    +-- reads/writes: {sync_root}/_syncr/state.json
-    +-- logs: {sync_root}/_syncr/logs/syncr_YYYYMMDD.log
+    +-- reads/writes: ~/.config/syncr/state.json
+    +-- logs: ~/.config/syncr/logs/syncr_YYYYMMDD.log
 ```
 
 ## Key Files

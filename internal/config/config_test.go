@@ -193,21 +193,26 @@ func TestValidate(t *testing.T) {
 func TestSyncrDataDir(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Without localDataDir set, falls back to {SyncRoot}/_syncr
-	cfg := &Config{SyncRoot: tmpDir}
-	want := filepath.Join(tmpDir, "_syncr")
-	got := cfg.SyncrDataDir()
-	if got != want {
-		t.Errorf("SyncrDataDir() fallback = %q, want %q", got, want)
-	}
-
 	// With localDataDir set, returns the local path
+	cfg := &Config{SyncRoot: tmpDir}
 	localDir := filepath.Join(tmpDir, "local")
 	cfg.SetLocalDataDir(localDir)
-	got = cfg.SyncrDataDir()
+	got := cfg.SyncrDataDir()
 	if got != localDir {
-		t.Errorf("SyncrDataDir() with local = %q, want %q", got, localDir)
+		t.Errorf("SyncrDataDir() = %q, want %q", got, localDir)
 	}
+}
+
+func TestSyncrDataDir_PanicsWithoutLocalDataDir(t *testing.T) {
+	cfg := &Config{SyncRoot: t.TempDir()}
+
+	defer func() {
+		if r := recover(); r == nil {
+			t.Error("SyncrDataDir() should panic when localDataDir is not set")
+		}
+	}()
+
+	cfg.SyncrDataDir()
 }
 
 func TestGetProject(t *testing.T) {
@@ -347,16 +352,20 @@ func TestValidate_EmptySyncPath(t *testing.T) {
 	}
 }
 
-func TestStateDir(t *testing.T) {
-	dir, err := StateDir()
+func Test_dataDir(t *testing.T) {
+	dir, err := dataDir()
 	if err != nil {
-		t.Fatalf("StateDir() error = %v", err)
+		t.Fatalf("dataDir() error = %v", err)
 	}
 	if dir == "" {
-		t.Fatal("StateDir() returned empty string")
+		t.Fatal("dataDir() returned empty string")
 	}
-	if filepath.Base(dir) != "syncr" {
-		t.Errorf("StateDir() = %q, want path ending in /syncr", dir)
+	if !filepath.IsAbs(dir) {
+		t.Errorf("dataDir() = %q, want absolute path", dir)
+	}
+	want := filepath.Join(".config", "syncr")
+	if len(dir) < len(want) || dir[len(dir)-len(want):] != want {
+		t.Errorf("dataDir() = %q, want path ending in %q", dir, want)
 	}
 }
 

@@ -68,7 +68,7 @@ func Add(args []string, configPath string, verbose, dryRun bool) {
 	// Initialize the project
 	project := cfg.GetProject(name)
 
-	st, err := state.LoadLocal()
+	st, err := state.Load(cfg.SyncrDataDir())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading state: %v\n", err)
 		os.Exit(1)

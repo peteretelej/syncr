@@ -1,5 +1,5 @@
 // Package state manages sync state tracking for projects.
-// State is stored locally in {UserConfigDir}/syncr/state.json, per-machine.
+// State is stored locally in ~/.config/syncr/state.json, per-machine.
 package state
 
 import (
@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
-
-	"github.com/peteretelej/syncr/internal/config"
 )
 
 // State tracks project initialization and sync history.
@@ -36,16 +34,6 @@ type ProjectState struct {
 }
 
 const stateVersion = 1
-
-// LoadLocal resolves the local state directory and loads the state.
-// This is the standard entry point for commands.
-func LoadLocal() (*State, error) {
-	stateDir, err := config.StateDir()
-	if err != nil {
-		return nil, fmt.Errorf("resolving state directory: %w", err)
-	}
-	return Load(stateDir)
-}
 
 // Load loads state from the given directory.
 // Creates the directory and an empty state file if they don't exist.

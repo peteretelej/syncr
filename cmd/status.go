@@ -22,7 +22,7 @@ func Status(configPath string) {
 	}
 
 	// Load state
-	st, err := state.LoadLocal()
+	st, err := state.Load(cfg.SyncrDataDir())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading state: %v\n", err)
 		os.Exit(1)

@@ -17,12 +17,7 @@ func ShowConfig(configPath string) {
 	}
 
 	fmt.Printf("Config: %s\n", cfg.Path())
-	stateDir, err := config.StateDir()
-	if err != nil {
-		fmt.Printf("State:  (error: %v)\n", err)
-	} else {
-		fmt.Printf("State:  %s\n", filepath.Join(stateDir, "state.json"))
-	}
+	fmt.Printf("Data:   %s\n", cfg.SyncrDataDir())
 	fmt.Println()
 	fmt.Printf("sync_root: %s\n", cfg.SyncRoot)
 	fmt.Printf("sync_interval: %dm\n", cfg.SyncIntervalMinutes)

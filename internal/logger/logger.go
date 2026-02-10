@@ -1,5 +1,5 @@
 // Package logger provides human-friendly logging to stdout and file.
-// Log files are stored in {sync_root}/_syncr/logs/ with daily rotation.
+// Log files are stored in ~/.config/syncr/logs/ with daily rotation.
 package logger
 
 import (

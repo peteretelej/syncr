@@ -130,6 +130,6 @@ nssm remove syncr confirm
 ## Notes
 
 - syncr handles `SIGINT` and `SIGTERM` for graceful shutdown on Linux/macOS.
-- Logs are written to `{sync_root}/_syncr/logs/` regardless of how the daemon is started.
+- Logs are written to `~/.config/syncr/logs/` regardless of how the daemon is started.
 - Config changes are picked up automatically without restarting the service.
 - Use `syncr status` from the command line to check sync state at any time.
