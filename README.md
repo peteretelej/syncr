@@ -8,7 +8,7 @@ Keeps local folders in sync with cloud storage (OneDrive, Dropbox, Google Drive)
 
 - **Bidirectional sync** - changes flow both ways between local and sync folder
 - **State tracking** - remembers sync history, detects conflicts
-- **Daemon mode** - continuous background sync with config hot-reload
+- **Daemon mode** - continuous background sync with config hot-reload ([run as a service](docs/service.md))
 - **Multi-project** - sync multiple folders with one config
 - **Cross-platform** - macOS, Linux, Windows
 
