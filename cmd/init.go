@@ -51,7 +51,7 @@ func Init(args []string, configPath string, verbose, dryRun bool) {
 	}
 
 	// Load state
-	st, err := state.LoadWithMigration(cfg.SyncrDataDir())
+	st, err := state.LoadLocal()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading state: %v\n", err)
 		os.Exit(1)
@@ -85,7 +85,7 @@ func batchInit(configPath string, verbose, dryRun bool) {
 		os.Exit(1)
 	}
 
-	st, err := state.LoadWithMigration(cfg.SyncrDataDir())
+	st, err := state.LoadLocal()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading state: %v\n", err)
 		os.Exit(1)

@@ -39,7 +39,7 @@ func Daemon(configPath string, verbose bool) {
 	defer log.Close()
 
 	// Load state
-	st, err := state.LoadWithMigration(cfg.SyncrDataDir())
+	st, err := state.LoadLocal()
 	if err != nil {
 		log.Error("Failed to load state: %v", err)
 		os.Exit(1)

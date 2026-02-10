@@ -72,6 +72,8 @@ func (h *TestHarness) CreateConfig(projects []config.Project) {
 	if err != nil {
 		h.t.Fatalf("failed to load config: %v", err)
 	}
+	// Override local data dir to use temp directory instead of real user config
+	loaded.SetLocalDataDir(filepath.Join(h.TmpDir, "_syncr"))
 	h.Config = loaded
 }
 

@@ -192,12 +192,21 @@ func TestValidate(t *testing.T) {
 
 func TestSyncrDataDir(t *testing.T) {
 	tmpDir := t.TempDir()
+
+	// Without localDataDir set, falls back to {SyncRoot}/_syncr
 	cfg := &Config{SyncRoot: tmpDir}
 	want := filepath.Join(tmpDir, "_syncr")
 	got := cfg.SyncrDataDir()
-
 	if got != want {
-		t.Errorf("SyncrDataDir() = %q, want %q", got, want)
+		t.Errorf("SyncrDataDir() fallback = %q, want %q", got, want)
+	}
+
+	// With localDataDir set, returns the local path
+	localDir := filepath.Join(tmpDir, "local")
+	cfg.SetLocalDataDir(localDir)
+	got = cfg.SyncrDataDir()
+	if got != localDir {
+		t.Errorf("SyncrDataDir() with local = %q, want %q", got, localDir)
 	}
 }
 

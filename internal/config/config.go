@@ -32,7 +32,8 @@ type Config struct {
 	SyncIntervalSeconds int       `json:"sync_interval_seconds"`
 	Projects            []Project `json:"projects"`
 
-	path string // file path (not serialized)
+	path         string // file path (not serialized)
+	localDataDir string // resolved local data directory (not serialized)
 }
 
 // Project represents a single sync project.
@@ -76,6 +77,11 @@ func Load(configPath string) (*Config, error) {
 	// Apply defaults
 	if cfg.SyncIntervalSeconds == 0 {
 		cfg.SyncIntervalSeconds = 300 // 5 minutes
+	}
+
+	// Resolve local data directory for per-machine working files
+	if stateDir, err := StateDir(); err == nil {
+		cfg.localDataDir = stateDir
 	}
 
 	return &cfg, nil
@@ -295,9 +301,21 @@ func StateDir() (string, error) {
 	return filepath.Join(configDir, "syncr"), nil
 }
 
-// SyncrDataDir returns the path to the _syncr metadata directory.
+// SyncrDataDir returns the local per-machine directory for working files
+// (bisync state, logs, PID file). Falls back to {sync_root}/_syncr if the
+// local directory was not resolved.
 func (c *Config) SyncrDataDir() string {
+	if c.localDataDir != "" {
+		return c.localDataDir
+	}
+	// Fallback for manually constructed configs (e.g. tests)
 	return filepath.Join(c.SyncRoot, "_syncr")
+}
+
+// SetLocalDataDir overrides the local data directory.
+// This is primarily for testing.
+func (c *Config) SetLocalDataDir(path string) {
+	c.localDataDir = path
 }
 
 // GetProject returns a project by name, or nil if not found.
