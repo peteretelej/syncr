@@ -53,8 +53,8 @@ func Daemon(configPath string, verbose bool) {
 	defer os.Remove(pidFile)
 
 	// Calculate sync interval
-	interval := time.Duration(cfg.SyncIntervalSeconds) * time.Second
-	oldInterval := cfg.SyncIntervalSeconds
+	interval := time.Duration(cfg.SyncIntervalMinutes) * time.Minute
+	oldInterval := cfg.SyncIntervalMinutes
 
 	// Track config file modification time for reload detection
 	resolvedConfigPath := cfg.Path()
@@ -92,12 +92,12 @@ func Daemon(configPath string, verbose bool) {
 			cfg, lastModTime = maybeReloadConfig(resolvedConfigPath, cfg, lastModTime, log)
 
 			// Reset ticker if interval changed
-			if cfg.SyncIntervalSeconds != oldInterval {
-				ticker.Reset(time.Duration(cfg.SyncIntervalSeconds) * time.Second)
+			if cfg.SyncIntervalMinutes != oldInterval {
+				ticker.Reset(time.Duration(cfg.SyncIntervalMinutes) * time.Minute)
 				log.Info("Sync interval changed: %v -> %v",
-					time.Duration(oldInterval)*time.Second,
-					time.Duration(cfg.SyncIntervalSeconds)*time.Second)
-				oldInterval = cfg.SyncIntervalSeconds
+					time.Duration(oldInterval)*time.Minute,
+					time.Duration(cfg.SyncIntervalMinutes)*time.Minute)
+				oldInterval = cfg.SyncIntervalMinutes
 			}
 
 			// Count enabled projects (config may have been reloaded)
@@ -198,7 +198,7 @@ func runDaemonSync(cfg *config.Config, st *state.State, log *logger.Logger) {
 
 		if !pathExists(syncPath) {
 			log.Warn("%s: cloud path missing: %s", project.Name, syncPath)
-			log.Warn("  Fix: Run 'syncr init %s' to create it", project.Name)
+			log.Warn("  Fix: Run 'syncr init %s --force' to recreate cloud folder from local files", project.Name)
 			st.RecordError(project.Name, fmt.Errorf("cloud path missing: %s", syncPath))
 			continue
 		}

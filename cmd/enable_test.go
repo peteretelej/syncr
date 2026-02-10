@@ -10,7 +10,7 @@ import (
 // testConfig is a minimal config struct for test verification.
 type testConfig struct {
 	SyncRoot            string        `json:"sync_root"`
-	SyncIntervalSeconds int           `json:"sync_interval_seconds"`
+	SyncIntervalMinutes int           `json:"sync_interval_minutes"`
 	Projects            []testProject `json:"projects"`
 }
 
@@ -27,7 +27,7 @@ func writeTestConfig(t *testing.T, dir string, projects []testProject) string {
 	configPath := filepath.Join(dir, "syncr.json")
 	cfg := testConfig{
 		SyncRoot:            dir,
-		SyncIntervalSeconds: 300,
+		SyncIntervalMinutes: 5,
 		Projects:            projects,
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")

@@ -17,7 +17,7 @@ func writeDaemonTestConfig(t *testing.T, dir string, interval int, projects []te
 	configPath := filepath.Join(dir, "syncr.json")
 	cfg := testConfig{
 		SyncRoot:            dir,
-		SyncIntervalSeconds: interval,
+		SyncIntervalMinutes: interval,
 		Projects:            projects,
 	}
 	data, err := json.MarshalIndent(cfg, "", "  ")
@@ -61,7 +61,7 @@ func TestConfigModTime(t *testing.T) {
 
 func TestMaybeReloadConfig_NoChange(t *testing.T) {
 	dir := t.TempDir()
-	configPath := writeDaemonTestConfig(t, dir, 300, []testProject{
+	configPath := writeDaemonTestConfig(t, dir, 5, []testProject{
 		{Name: "docs", LocalPath: dir, SyncPath: "docs", Enabled: true},
 	})
 
@@ -89,7 +89,7 @@ func TestMaybeReloadConfig_NoChange(t *testing.T) {
 
 func TestMaybeReloadConfig_ValidChange(t *testing.T) {
 	dir := t.TempDir()
-	configPath := writeDaemonTestConfig(t, dir, 300, []testProject{
+	configPath := writeDaemonTestConfig(t, dir, 5, []testProject{
 		{Name: "docs", LocalPath: dir, SyncPath: "docs", Enabled: true},
 	})
 
@@ -117,7 +117,7 @@ func TestMaybeReloadConfig_ValidChange(t *testing.T) {
 	}
 
 	// Now add a second project and rewrite
-	writeDaemonTestConfig(t, dir, 300, []testProject{
+	writeDaemonTestConfig(t, dir, 5, []testProject{
 		{Name: "docs", LocalPath: dir, SyncPath: "docs", Enabled: true},
 		{Name: "photos", LocalPath: dir, SyncPath: "photos", Enabled: true},
 	})
@@ -130,7 +130,7 @@ func TestMaybeReloadConfig_ValidChange(t *testing.T) {
 
 func TestMaybeReloadConfig_InvalidKeepsOld(t *testing.T) {
 	dir := t.TempDir()
-	configPath := writeDaemonTestConfig(t, dir, 300, []testProject{
+	configPath := writeDaemonTestConfig(t, dir, 5, []testProject{
 		{Name: "docs", LocalPath: dir, SyncPath: "docs", Enabled: true},
 	})
 
@@ -157,7 +157,7 @@ func TestMaybeReloadConfig_InvalidKeepsOld(t *testing.T) {
 	}
 
 	// Write valid JSON but with invalid values (interval too low)
-	writeDaemonTestConfig(t, dir, 10, []testProject{
+	writeDaemonTestConfig(t, dir, -1, []testProject{
 		{Name: "docs", LocalPath: dir, SyncPath: "docs", Enabled: true},
 	})
 
@@ -169,7 +169,7 @@ func TestMaybeReloadConfig_InvalidKeepsOld(t *testing.T) {
 
 func TestMaybeReloadConfig_IntervalChange(t *testing.T) {
 	dir := t.TempDir()
-	configPath := writeDaemonTestConfig(t, dir, 300, []testProject{
+	configPath := writeDaemonTestConfig(t, dir, 5, []testProject{
 		{Name: "docs", LocalPath: dir, SyncPath: "docs", Enabled: true},
 	})
 
@@ -177,26 +177,26 @@ func TestMaybeReloadConfig_IntervalChange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load config: %v", err)
 	}
-	if current.SyncIntervalSeconds != 300 {
-		t.Fatalf("expected interval 300, got %d", current.SyncIntervalSeconds)
+	if current.SyncIntervalMinutes != 5 {
+		t.Fatalf("expected interval 5, got %d", current.SyncIntervalMinutes)
 	}
 
 	// Rewrite config with new interval
-	writeDaemonTestConfig(t, dir, 600, []testProject{
+	writeDaemonTestConfig(t, dir, 10, []testProject{
 		{Name: "docs", LocalPath: dir, SyncPath: "docs", Enabled: true},
 	})
 
 	log := logger.NewStdout(false)
 	got, _ := maybeReloadConfig(configPath, current, time.Time{}, log)
 
-	if got.SyncIntervalSeconds != 600 {
-		t.Errorf("expected interval 600 after reload, got %d", got.SyncIntervalSeconds)
+	if got.SyncIntervalMinutes != 10 {
+		t.Errorf("expected interval 10 after reload, got %d", got.SyncIntervalMinutes)
 	}
 }
 
 func TestMaybeReloadConfig_FileDeleted(t *testing.T) {
 	dir := t.TempDir()
-	configPath := writeDaemonTestConfig(t, dir, 300, []testProject{
+	configPath := writeDaemonTestConfig(t, dir, 5, []testProject{
 		{Name: "docs", LocalPath: dir, SyncPath: "docs", Enabled: true},
 	})
 

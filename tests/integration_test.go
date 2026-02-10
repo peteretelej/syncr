@@ -54,7 +54,7 @@ func (h *TestHarness) CreateConfig(projects []config.Project) {
 
 	cfg := &config.Config{
 		SyncRoot:            h.SyncRoot,
-		SyncIntervalSeconds: 300,
+		SyncIntervalMinutes: 5,
 		Projects:            projects,
 	}
 

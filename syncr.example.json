@@ -1,6 +1,6 @@
 {
   "sync_root": "C:\\Users\\You\\OneDrive\\syncr",
-  "sync_interval_seconds": 300,
+  "sync_interval_minutes": 5,
   "projects": [
     {
       "name": "webapp-docs",

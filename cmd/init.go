@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/peteretelej/syncr/internal/config"
@@ -156,11 +157,7 @@ func batchInit(configPath string, verbose, dryRun bool) {
 		fmt.Println(color.YellowString("Initialized %d of %d projects", successCount, total))
 	}
 	if len(failed) > 0 {
-		fmt.Printf("%s", color.RedString("Failed:"))
-		for _, name := range failed {
-			fmt.Printf(" %s", name)
-		}
-		fmt.Println()
+		fmt.Printf("%s %s\n", color.RedString("Failed:"), strings.Join(failed, ", "))
 		os.Exit(1)
 	}
 }
@@ -299,7 +296,7 @@ func createStarterConfig(cfgPath string) {
 
 	cfg := config.Config{
 		SyncRoot:            cwd,
-		SyncIntervalSeconds: 300,
+		SyncIntervalMinutes: 5,
 		Projects: []config.Project{
 			{
 				Name:      "my-project",

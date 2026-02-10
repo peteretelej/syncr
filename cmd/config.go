@@ -25,7 +25,7 @@ func ShowConfig(configPath string) {
 	}
 	fmt.Println()
 	fmt.Printf("sync_root: %s\n", cfg.SyncRoot)
-	fmt.Printf("sync_interval: %ds\n", cfg.SyncIntervalSeconds)
+	fmt.Printf("sync_interval: %dm\n", cfg.SyncIntervalMinutes)
 	fmt.Println()
 	fmt.Printf("Projects (%d):\n", len(cfg.Projects))
 

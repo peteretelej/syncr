@@ -23,7 +23,7 @@ func TestLoad(t *testing.T) {
 
 	configContent := `{
 		"sync_root": "` + jsonEscape(tmpDir) + `",
-		"sync_interval_seconds": 300,
+		"sync_interval_minutes": 5,
 		"projects": [
 			{
 				"name": "TestProject",
@@ -47,8 +47,8 @@ func TestLoad(t *testing.T) {
 		t.Errorf("SyncRoot = %q, want %q", cfg.SyncRoot, tmpDir)
 	}
 
-	if cfg.SyncIntervalSeconds != 300 {
-		t.Errorf("SyncIntervalSeconds = %d, want 300", cfg.SyncIntervalSeconds)
+	if cfg.SyncIntervalMinutes != 5 {
+		t.Errorf("SyncIntervalMinutes = %d, want 5", cfg.SyncIntervalMinutes)
 	}
 
 	if len(cfg.Projects) != 1 {
@@ -64,7 +64,7 @@ func TestLoad_DefaultInterval(t *testing.T) {
 	tmpDir := t.TempDir()
 	configPath := filepath.Join(tmpDir, "syncr.json")
 
-	// Config without sync_interval_seconds
+	// Config without sync_interval_minutes
 	configContent := `{
 		"sync_root": "` + jsonEscape(tmpDir) + `",
 		"projects": []
@@ -79,8 +79,8 @@ func TestLoad_DefaultInterval(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if cfg.SyncIntervalSeconds != 300 {
-		t.Errorf("SyncIntervalSeconds = %d, want 300 (default)", cfg.SyncIntervalSeconds)
+	if cfg.SyncIntervalMinutes != 5 {
+		t.Errorf("SyncIntervalMinutes = %d, want 5 (default)", cfg.SyncIntervalMinutes)
 	}
 }
 
@@ -105,7 +105,7 @@ func TestValidate(t *testing.T) {
 			name: "valid config",
 			cfg: Config{
 				SyncRoot:            tmpDir,
-				SyncIntervalSeconds: 300,
+				SyncIntervalMinutes: 300,
 				Projects: []Project{
 					{Name: "Test", LocalPath: tmpDir, SyncPath: "test", Enabled: true},
 				},
@@ -116,7 +116,7 @@ func TestValidate(t *testing.T) {
 			name: "missing sync_root",
 			cfg: Config{
 				SyncRoot:            "",
-				SyncIntervalSeconds: 300,
+				SyncIntervalMinutes: 300,
 			},
 			wantErr: true,
 		},
@@ -124,7 +124,7 @@ func TestValidate(t *testing.T) {
 			name: "relative sync_root",
 			cfg: Config{
 				SyncRoot:            "relative/path",
-				SyncIntervalSeconds: 300,
+				SyncIntervalMinutes: 300,
 			},
 			wantErr: true,
 		},
@@ -132,7 +132,7 @@ func TestValidate(t *testing.T) {
 			name: "nonexistent sync_root",
 			cfg: Config{
 				SyncRoot:            filepath.Join(tmpDir, "nonexistent"),
-				SyncIntervalSeconds: 300,
+				SyncIntervalMinutes: 300,
 			},
 			wantErr: true,
 		},
@@ -140,7 +140,7 @@ func TestValidate(t *testing.T) {
 			name: "interval too short",
 			cfg: Config{
 				SyncRoot:            tmpDir,
-				SyncIntervalSeconds: 30,
+				SyncIntervalMinutes: 0,
 			},
 			wantErr: true,
 		},
@@ -148,7 +148,7 @@ func TestValidate(t *testing.T) {
 			name: "duplicate project names",
 			cfg: Config{
 				SyncRoot:            tmpDir,
-				SyncIntervalSeconds: 300,
+				SyncIntervalMinutes: 300,
 				Projects: []Project{
 					{Name: "Same", LocalPath: tmpDir, SyncPath: "a", Enabled: true},
 					{Name: "Same", LocalPath: tmpDir, SyncPath: "b", Enabled: true},
@@ -160,7 +160,7 @@ func TestValidate(t *testing.T) {
 			name: "empty project name",
 			cfg: Config{
 				SyncRoot:            tmpDir,
-				SyncIntervalSeconds: 300,
+				SyncIntervalMinutes: 300,
 				Projects: []Project{
 					{Name: "", LocalPath: tmpDir, SyncPath: "test", Enabled: true},
 				},
@@ -171,7 +171,7 @@ func TestValidate(t *testing.T) {
 			name: "relative local_path",
 			cfg: Config{
 				SyncRoot:            tmpDir,
-				SyncIntervalSeconds: 300,
+				SyncIntervalMinutes: 300,
 				Projects: []Project{
 					{Name: "Test", LocalPath: "relative/path", SyncPath: "test", Enabled: true},
 				},
@@ -241,7 +241,7 @@ func TestSave(t *testing.T) {
 
 	cfg := &Config{
 		SyncRoot:            tmpDir,
-		SyncIntervalSeconds: 600,
+		SyncIntervalMinutes: 10,
 		Projects: []Project{
 			{Name: "Test", LocalPath: tmpDir, SyncPath: "test", Enabled: true},
 		},
@@ -258,8 +258,8 @@ func TestSave(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if loaded.SyncIntervalSeconds != 600 {
-		t.Errorf("after save/load: SyncIntervalSeconds = %d, want 600", loaded.SyncIntervalSeconds)
+	if loaded.SyncIntervalMinutes != 10 {
+		t.Errorf("after save/load: SyncIntervalMinutes = %d, want 10", loaded.SyncIntervalMinutes)
 	}
 
 	if len(loaded.Projects) != 1 || loaded.Projects[0].Name != "Test" {
@@ -271,7 +271,7 @@ func TestSave_NoPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := &Config{
 		SyncRoot:            tmpDir,
-		SyncIntervalSeconds: 300,
+		SyncIntervalMinutes: 300,
 	}
 	// path is not set
 
@@ -316,8 +316,8 @@ func TestDefaultConfig(t *testing.T) {
 		t.Errorf("DefaultConfig().SyncRoot = %q, want empty", cfg.SyncRoot)
 	}
 
-	if cfg.SyncIntervalSeconds != 300 {
-		t.Errorf("DefaultConfig().SyncIntervalSeconds = %d, want 300", cfg.SyncIntervalSeconds)
+	if cfg.SyncIntervalMinutes != 5 {
+		t.Errorf("DefaultConfig().SyncIntervalMinutes = %d, want 5", cfg.SyncIntervalMinutes)
 	}
 
 	if cfg.Projects == nil {
@@ -334,7 +334,7 @@ func TestValidate_EmptySyncPath(t *testing.T) {
 
 	cfg := Config{
 		SyncRoot:            tmpDir,
-		SyncIntervalSeconds: 300,
+		SyncIntervalMinutes: 300,
 		Projects: []Project{
 			{Name: "Test", LocalPath: tmpDir, SyncPath: "", Enabled: true},
 		},
@@ -452,7 +452,7 @@ func TestValidateFull_ValidConfig(t *testing.T) {
 
 	cfg := Config{
 		SyncRoot:            tmpDir,
-		SyncIntervalSeconds: 300,
+		SyncIntervalMinutes: 300,
 		Projects: []Project{
 			{Name: "myproject", LocalPath: localDir, SyncPath: "myproject", Enabled: true},
 		},
@@ -470,7 +470,7 @@ func TestValidateFull_ValidConfig(t *testing.T) {
 func TestValidateFull_MissingSyncRoot(t *testing.T) {
 	cfg := Config{
 		SyncRoot:            "",
-		SyncIntervalSeconds: 300,
+		SyncIntervalMinutes: 300,
 	}
 	result := cfg.ValidateFull()
 	if len(result.Errors) == 0 {
@@ -484,7 +484,7 @@ func TestValidateFull_MissingSyncRoot(t *testing.T) {
 func TestValidateFull_RelativeSyncRoot(t *testing.T) {
 	cfg := Config{
 		SyncRoot:            "relative/path",
-		SyncIntervalSeconds: 300,
+		SyncIntervalMinutes: 300,
 	}
 	result := cfg.ValidateFull()
 	if len(result.Errors) == 0 {
@@ -499,7 +499,7 @@ func TestValidateFull_NonexistentSyncRoot(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := Config{
 		SyncRoot:            filepath.Join(tmpDir, "nonexistent"),
-		SyncIntervalSeconds: 300,
+		SyncIntervalMinutes: 300,
 	}
 	result := cfg.ValidateFull()
 	// Should be a warning, not an error
@@ -524,7 +524,7 @@ func TestValidateFull_IntervalBelowMinimum(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := Config{
 		SyncRoot:            tmpDir,
-		SyncIntervalSeconds: 30,
+		SyncIntervalMinutes: 0,
 	}
 	result := cfg.ValidateFull()
 	if len(result.Errors) == 0 {
@@ -532,7 +532,7 @@ func TestValidateFull_IntervalBelowMinimum(t *testing.T) {
 	}
 	found := false
 	for _, e := range result.Errors {
-		if e == "sync_interval_seconds must be at least 60" {
+		if e == "sync_interval_minutes must be at least 1" {
 			found = true
 		}
 	}
@@ -545,7 +545,7 @@ func TestValidateFull_DuplicateProjectNames(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := Config{
 		SyncRoot:            tmpDir,
-		SyncIntervalSeconds: 300,
+		SyncIntervalMinutes: 300,
 		Projects: []Project{
 			{Name: "dup", LocalPath: tmpDir, SyncPath: "a", Enabled: true},
 			{Name: "dup", LocalPath: tmpDir, SyncPath: "b", Enabled: true},
@@ -567,7 +567,7 @@ func TestValidateFull_OverlappingSyncPaths(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := Config{
 		SyncRoot:            tmpDir,
-		SyncIntervalSeconds: 300,
+		SyncIntervalMinutes: 300,
 		Projects: []Project{
 			{Name: "parent", LocalPath: tmpDir, SyncPath: "work", Enabled: true},
 			{Name: "child", LocalPath: tmpDir, SyncPath: "work/sub", Enabled: true},
@@ -589,7 +589,7 @@ func TestValidateFull_NonexistentLocalPath(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := Config{
 		SyncRoot:            tmpDir,
-		SyncIntervalSeconds: 300,
+		SyncIntervalMinutes: 300,
 		Projects: []Project{
 			{Name: "proj", LocalPath: filepath.Join(tmpDir, "nope"), SyncPath: "proj", Enabled: true},
 		},
@@ -613,7 +613,7 @@ func TestValidateFull_NonexistentCloudPath(t *testing.T) {
 
 	cfg := Config{
 		SyncRoot:            tmpDir,
-		SyncIntervalSeconds: 300,
+		SyncIntervalMinutes: 300,
 		Projects: []Project{
 			{Name: "proj", LocalPath: localDir, SyncPath: "proj", Enabled: true},
 		},
@@ -635,7 +635,7 @@ func TestValidateFull_NoEnabledProjects(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := Config{
 		SyncRoot:            tmpDir,
-		SyncIntervalSeconds: 300,
+		SyncIntervalMinutes: 300,
 		Projects: []Project{
 			{Name: "proj", LocalPath: tmpDir, SyncPath: "proj", Enabled: false},
 		},
@@ -655,7 +655,7 @@ func TestValidateFull_NoEnabledProjects(t *testing.T) {
 func TestValidateFull_MultipleIssues(t *testing.T) {
 	cfg := Config{
 		SyncRoot:            "",
-		SyncIntervalSeconds: 10,
+		SyncIntervalMinutes: 0,
 		Projects: []Project{
 			{Name: "", LocalPath: "", Enabled: false},
 		},
@@ -736,7 +736,7 @@ func TestValidate_SyncPathVariations(t *testing.T) {
 
 			cfg := Config{
 				SyncRoot:            tmpDir,
-				SyncIntervalSeconds: 300,
+				SyncIntervalMinutes: 300,
 				Projects:            projects,
 			}
 

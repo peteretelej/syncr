@@ -29,7 +29,7 @@ func (v ValidationResult) HasIssues() bool {
 // Config represents the syncr configuration.
 type Config struct {
 	SyncRoot            string    `json:"sync_root"`
-	SyncIntervalSeconds int       `json:"sync_interval_seconds"`
+	SyncIntervalMinutes int       `json:"sync_interval_minutes"`
 	Projects            []Project `json:"projects"`
 
 	path         string // file path (not serialized)
@@ -61,7 +61,7 @@ func Load(configPath string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("config file not found: %s", path)
+			return nil, fmt.Errorf("config file not found: %s (run 'syncr init' to create one, or set SYNCR_CONFIG)", path)
 		}
 		return nil, fmt.Errorf("reading config: %w", err)
 	}
@@ -79,8 +79,8 @@ func Load(configPath string) (*Config, error) {
 	cfg.path = absPath
 
 	// Apply defaults
-	if cfg.SyncIntervalSeconds == 0 {
-		cfg.SyncIntervalSeconds = 300 // 5 minutes
+	if cfg.SyncIntervalMinutes == 0 {
+		cfg.SyncIntervalMinutes = 5 // 5 minutes
 	}
 
 	// Resolve local data directory for per-machine working files
@@ -123,8 +123,8 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("sync_root does not exist: %s", c.SyncRoot)
 	}
 
-	if c.SyncIntervalSeconds < 60 {
-		return errors.New("sync_interval_seconds must be at least 60")
+	if c.SyncIntervalMinutes < 1 {
+		return errors.New("sync_interval_minutes must be at least 1")
 	}
 
 	// Check for duplicate project names and overlapping sync paths
@@ -205,8 +205,8 @@ func (c *Config) ValidateFull() ValidationResult {
 		result.Errors = append(result.Errors, "sync_root must be an absolute path")
 	}
 
-	if c.SyncIntervalSeconds < 60 {
-		result.Errors = append(result.Errors, "sync_interval_seconds must be at least 60")
+	if c.SyncIntervalMinutes < 1 {
+		result.Errors = append(result.Errors, "sync_interval_minutes must be at least 1")
 	}
 
 	names := make(map[string]bool)
@@ -336,7 +336,7 @@ func (c *Config) GetProject(name string) *Project {
 func DefaultConfig() *Config {
 	return &Config{
 		SyncRoot:            "",
-		SyncIntervalSeconds: 300,
+		SyncIntervalMinutes: 5,
 		Projects:            []Project{},
 	}
 }
