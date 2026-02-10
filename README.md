@@ -63,7 +63,62 @@ syncr init docs
 syncr sync
 ```
 
+## Usage
+
+```
+syncr - Lightweight bidirectional folder sync
+
+Usage:
+  syncr <command> [options]
+
+Commands:
+  init [project]      Initialize project(s) (all uninitialized if no name given)
+  add <name> [path]   Add a new project interactively
+  sync [project]      Run sync once (all projects if no name given)
+  daemon              Run continuous sync daemon
+  status              Show status of all projects
+  config              Show current configuration
+  logs                Show today's log (use -f to follow)
+  enable <project>    Enable a project for syncing
+  disable <project>   Disable a project from syncing
+  version             Show version information
+  help                Show this help message
+
+Options:
+  -config, -c string  Path to config file (default: $SYNCR_CONFIG or ./syncr.json)
+  -verbose          Enable verbose output
+  -dry-run          Show what would be synced without making changes
+
+Environment Variables:
+  SYNCR_CONFIG    Path to config file (overridden by -config flag)
+
+Examples:
+  syncr init                   Initialize all uninitialized enabled projects
+  syncr init MyProject        Initialize a specific project
+  syncr add docs ~/Projects/docs   Add and initialize a project
+  syncr sync                  Sync all enabled projects
+  syncr sync MyProject        Sync specific project
+  syncr daemon                Run continuous sync every 5 minutes
+  syncr status                Show project status and conflicts
+  syncr enable MyProject      Enable a project for syncing
+  syncr disable MyProject     Disable a project from syncing
+```
+
 ## Configuration
+
+syncr looks for its config file in this order:
+
+1. `-config` / `-c` flag (explicit path)
+2. `SYNCR_CONFIG` environment variable
+3. `./syncr.json` (current working directory)
+
+Set `SYNCR_CONFIG` to use a shared config from a fixed location:
+
+```bash
+export SYNCR_CONFIG=~/syncr.json
+```
+
+### Config format
 
 ```json
 {
@@ -71,15 +126,9 @@ syncr sync
   "sync_interval_seconds": 300,
   "projects": [
     {
-      "name": "project-docs",
+      "name": "docs",
       "local_path": "/Users/You/Projects/myapp/docs",
-      "sync_path": "project-docs",
-      "enabled": true
-    },
-    {
-      "name": "notes",
-      "local_path": "/Users/You/Notes",
-      "sync_path": "notes",
+      "sync_path": "docs",
       "enabled": true
     }
   ]
@@ -92,33 +141,8 @@ syncr sync
 | `sync_interval_seconds` | How often daemon syncs (minimum 60, default 300) |
 | `projects[].name` | Project identifier |
 | `projects[].local_path` | Absolute path to local folder |
-| `projects[].sync_path` | Subfolder name in sync_root |
+| `projects[].sync_path` | Subfolder name under sync_root |
 | `projects[].enabled` | Set false to skip this project |
-
-## Commands
-
-```bash
-syncr init [project]       # Initialize project(s) for first sync
-syncr init                 # Initialize all uninitialized enabled projects
-syncr add <name> [path]    # Add a new project and initialize it
-syncr sync [project]       # Sync all enabled projects (or a specific one)
-syncr daemon               # Run continuous sync
-syncr status               # Show project status and conflicts
-syncr config               # Show current configuration and validation
-syncr logs                 # Show today's log
-syncr logs -f              # Follow log output in real time
-syncr enable <project>     # Enable a project for syncing
-syncr disable <project>    # Disable a project from syncing
-syncr version              # Show version
-```
-
-### Options
-
-```
--config, -c string    Path to config file (default: ./syncr.json)
--verbose              Enable verbose output
--dry-run              Show what would sync without making changes
-```
 
 ## How It Works
 
@@ -129,11 +153,29 @@ Local Folder                      Cloud Storage
 ~/Projects/myapp/docs  <------>  OneDrive/syncr/docs/
 ```
 
-Sync metadata is stored in `{sync_root}/_syncr/`:
+**Local storage.** Logs, bisync working data, PID file, and sync state are all stored locally on your machine in your OS config directory, not in the cloud sync_root. This means each machine tracks its own sync history independently.
+
+| OS | Local data path |
+|----|----------------|
+| macOS | `~/Library/Application Support/syncr/` |
+| Linux | `~/.config/syncr/` |
+| Windows | `%AppData%\syncr\` |
+
+Within that directory:
+
+- `state.json` - per-machine sync state (initialization status, last sync time, error counts)
 - `logs/` - daily log files (auto-rotated, 7-day retention)
 - `bisync/` - rclone bisync working data
 
-Sync state (`state.json`) is stored locally per machine in your OS config directory (e.g. `~/.config/syncr/` on Linux/macOS), so each machine tracks its own sync history independently.
+**Safety limits.** Sync aborts if more than 50% of files would be deleted, protecting against accidental bulk deletion.
+
+**Cloud storage** only contains the synced project files:
+
+```
+{sync_root}/
+├── docs/       # synced project files
+└── notes/      # another project
+```
 
 ## Initialization
 
@@ -179,23 +221,6 @@ Cross-compile:
 GOOS=darwin GOARCH=arm64 go build -o syncr-darwin-arm64 .
 GOOS=linux GOARCH=amd64 go build -o syncr-linux-amd64 .
 GOOS=windows GOARCH=amd64 go build -o syncr-windows-amd64.exe .
-```
-
-## Project Structure
-
-```
-syncr/
-├── main.go              # CLI entry point
-├── cmd/                 # Command implementations
-├── internal/
-│   ├── config/          # Configuration loading and validation
-│   ├── state/           # Sync state tracking
-│   ├── sync/            # rclone bisync wrapper
-│   ├── progress/        # Sync progress output
-│   └── logger/          # Logging with daily rotation
-├── syncr.example.json   # Example config
-├── syncr.json           # Your config (create this, gitignored)
-└── tests/               # Integration tests
 ```
 
 ## License

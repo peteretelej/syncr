@@ -61,7 +61,7 @@ func main() {
 }
 
 func printUsage() {
-	fmt.Println(`syncr - Bidirectional folder sync via cloud storage
+	fmt.Println(`syncr - Lightweight bidirectional folder sync
 
 Usage:
   syncr <command> [options]
