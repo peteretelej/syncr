@@ -18,6 +18,9 @@ func Init(args []string, configPath string, verbose, dryRun bool) {
 		// No project specified - create starter config if none exists
 		cfgPath := configPath
 		if cfgPath == "" {
+			cfgPath = os.Getenv("SYNCR_CONFIG")
+		}
+		if cfgPath == "" {
 			cfgPath = "syncr.json"
 		}
 		if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
