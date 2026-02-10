@@ -216,7 +216,7 @@ func runDaemonSync(cfg *config.Config, st *state.State, log *logger.Logger) {
 			newErrorCount := st.GetProject(project.Name).ErrorCount
 			if newErrorCount >= MaxConsecutiveErrors {
 				log.Warn("  Project has %d consecutive errors", newErrorCount)
-				log.Warn("  Suggestion: Run 'syncr init %s --force' to re-initialize", project.Name)
+				log.Warn("  Suggestion: Run 'syncr init %s --force' to resync (local files are preserved)", project.Name)
 			}
 			continue
 		}

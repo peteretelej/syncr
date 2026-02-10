@@ -63,7 +63,7 @@ func Init(args []string, configPath string, verbose, dryRun bool) {
 	// Check if already initialized
 	if st.IsInitialized(projectName) && !force {
 		fmt.Printf("Project %q is already initialized.\n", projectName)
-		fmt.Println("Use --force to re-initialize.")
+		fmt.Println("Use --force to resync (local files are preserved).")
 		return
 	}
 

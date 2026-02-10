@@ -111,7 +111,7 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 	ps := st.GetProject(project.Name)
 	if ps.ErrorCount >= MaxConsecutiveErrors {
 		prog.Skip(project.Name, fmt.Sprintf("%d consecutive errors", ps.ErrorCount))
-		prog.Detail("Fix: Run 'syncr init %s --force' to re-initialize", project.Name)
+		prog.Detail("Fix: Run 'syncr init %s --force' to resync (local files are preserved)", project.Name)
 		return "skipped"
 	}
 
@@ -129,7 +129,7 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 	if !pathExists(syncPath) {
 		prog.Start(project.Name)
 		prog.Fail(fmt.Errorf("cloud path missing: %s", syncPath), project.LocalPath, syncPath)
-		prog.Detail("Fix: Run 'syncr init %s' to create it", project.Name)
+		prog.Detail("Fix: Run 'syncr init %s --force' to recreate cloud folder from local files", project.Name)
 		st.RecordError(project.Name, fmt.Errorf("cloud path missing: %s", syncPath))
 		return "failed"
 	}
@@ -157,7 +157,7 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 			newErrorCount := st.GetProject(project.Name).ErrorCount
 			if newErrorCount >= MaxConsecutiveErrors {
 				prog.Detail("Warning: %d consecutive errors", newErrorCount)
-				prog.Detail("Suggestion: Run 'syncr init %s --force' to re-initialize", project.Name)
+				prog.Detail("Suggestion: Run 'syncr init %s --force' to resync (local files are preserved)", project.Name)
 			}
 		}
 		return "failed"
