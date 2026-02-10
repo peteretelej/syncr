@@ -36,7 +36,7 @@ func ShowConfig(configPath string) {
 		}
 		fmt.Printf("  %s (%s)\n", p.Name, status)
 		fmt.Printf("    local:  %s\n", p.LocalPath)
-		fmt.Printf("    cloud:  %s\n", p.SyncPath)
+		fmt.Printf("    sync folder:  %s\n", filepath.Join(cfg.SyncRoot, p.SyncPath))
 		fmt.Println()
 	}
 

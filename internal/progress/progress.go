@@ -53,7 +53,7 @@ func (p *Progress) Fail(err error, localPath, remotePath string) {
 	if p.verbose {
 		dim := color.New(color.Faint)
 		dim.Fprintf(p.out, "  local: %s\n", localPath)
-		dim.Fprintf(p.out, "  remote: %s\n", remotePath)
+		dim.Fprintf(p.out, "  sync folder: %s\n", remotePath)
 	}
 }
 

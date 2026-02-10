@@ -170,10 +170,10 @@ func initProject(cfg *config.Config, st *state.State, project *config.Project, v
 
 	fmt.Printf("Initializing project: %s\n", project.Name)
 	dim.Printf("  Local:  %s\n", project.LocalPath)
-	dim.Printf("  Cloud:  %s\n", syncPath)
+	dim.Printf("  Sync folder:  %s\n", syncPath)
 	fmt.Println()
 
-	// Check paths exist, create cloud folder if needed
+	// Check paths exist, create sync folder if needed
 	fmt.Println("Checking paths...")
 
 	localExists := pathExists(project.LocalPath)
@@ -181,15 +181,15 @@ func initProject(cfg *config.Config, st *state.State, project *config.Project, v
 		return fmt.Errorf("local path does not exist: %s", project.LocalPath)
 	}
 
-	// Create cloud folder if it doesn't exist
+	// Create sync folder if it doesn't exist
 	if !pathExists(syncPath) {
 		if dryRun {
-			fmt.Printf("  %s Would create cloud folder: %s\n", color.CyanString("[DRY-RUN]"), dim.Sprint(syncPath))
+			fmt.Printf("  %s Would create sync folder: %s\n", color.CyanString("[DRY-RUN]"), dim.Sprint(syncPath))
 		} else {
 			if err := os.MkdirAll(syncPath, 0755); err != nil {
-				return fmt.Errorf("creating cloud folder: %v", err)
+				return fmt.Errorf("creating sync folder: %v", err)
 			}
-			fmt.Printf("  Created cloud folder: %s\n", dim.Sprint(syncPath))
+			fmt.Printf("  Created sync folder: %s\n", dim.Sprint(syncPath))
 		}
 	}
 
@@ -198,7 +198,7 @@ func initProject(cfg *config.Config, st *state.State, project *config.Project, v
 	syncCount := countFiles(syncPath)
 
 	fmt.Printf("  Local folder:  %d files\n", localCount)
-	fmt.Printf("  Cloud folder:  %d files\n", syncCount)
+	fmt.Printf("  Sync folder:  %d files\n", syncCount)
 	fmt.Println()
 
 	// Determine resync mode based on folder contents
@@ -208,10 +208,10 @@ func initProject(cfg *config.Config, st *state.State, project *config.Project, v
 	switch {
 	case localCount == 0 && syncCount > 0:
 		resyncMode = sync.ResyncPath2
-		actionDesc = "Cloud has files, local is empty. Pulling from cloud..."
+		actionDesc = "Sync folder has files, local is empty. Pulling from sync folder..."
 	case syncCount == 0 && localCount > 0:
 		resyncMode = sync.ResyncPath1
-		actionDesc = "Local has files, cloud is empty. Pushing to cloud..."
+		actionDesc = "Local has files, sync folder is empty. Pushing to sync folder..."
 	case localCount == 0 && syncCount == 0:
 		actionDesc = "Both folders are empty. Marking as initialized."
 		if dryRun {
@@ -252,7 +252,8 @@ func initProject(cfg *config.Config, st *state.State, project *config.Project, v
 	result, err := sync.RunBisync(ctx, project.LocalPath, syncPath, opts)
 	if err != nil {
 		st.RecordError(project.Name, err)
-		return fmt.Errorf("during sync: %v", err)
+		friendly, _ := sync.FriendlyError(err)
+		return fmt.Errorf("%s", friendly)
 	}
 
 	fmt.Printf("  Duration: %v\n", result.Duration.Round(1e8))
@@ -321,7 +322,7 @@ func createStarterConfig(cfgPath string) {
 	absPath, _ := filepath.Abs(cfgPath)
 	fmt.Printf("Created %s\n\n", absPath)
 	fmt.Println("Next steps:")
-	fmt.Println("  1. Update sync_root to your cloud storage path (e.g. OneDrive, Dropbox)")
+	fmt.Println("  1. Update sync_root to your sync folder path (e.g. OneDrive, Dropbox)")
 	fmt.Println("  2. Update the sample project or add your own (set enabled: true)")
 	fmt.Println("  3. Run: syncr init <project-name>")
 }

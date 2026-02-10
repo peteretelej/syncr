@@ -270,15 +270,15 @@ func (c *Config) ValidateFull() ValidationResult {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("project %s: local_path does not exist: %s", p.Name, p.LocalPath))
 		}
 
-		// Check cloud path existence
+		// Check sync folder existence
 		if c.SyncRoot != "" && filepath.IsAbs(c.SyncRoot) {
 			syncPath := filepath.Clean(p.SyncPath)
 			if syncPath == "" || syncPath == "." {
 				syncPath = p.Name
 			}
-			cloudPath := filepath.Join(c.SyncRoot, syncPath)
-			if _, err := os.Stat(cloudPath); os.IsNotExist(err) {
-				result.Warnings = append(result.Warnings, fmt.Sprintf("project %s: cloud path does not exist: %s", p.Name, cloudPath))
+			fullSyncPath := filepath.Join(c.SyncRoot, syncPath)
+			if _, err := os.Stat(fullSyncPath); os.IsNotExist(err) {
+				result.Warnings = append(result.Warnings, fmt.Sprintf("project %s: sync folder does not exist: %s", p.Name, fullSyncPath))
 			}
 		}
 	}

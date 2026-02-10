@@ -80,9 +80,12 @@ func Daemon(configPath string, verbose bool) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 
+	// Track which projects have already warned about being skipped
+	warnedSkips := make(map[string]bool)
+
 	// Run initial sync
 	log.Info("Running initial sync (%d projects)...", enabledCount)
-	runDaemonSync(cfg, st, log)
+	runDaemonSync(cfg, st, log, warnedSkips)
 
 	// Main loop
 	for {
@@ -108,7 +111,7 @@ func Daemon(configPath string, verbose bool) {
 				}
 			}
 			log.Info("Running scheduled sync (%d projects)...", scheduledEnabled)
-			runDaemonSync(cfg, st, log)
+			runDaemonSync(cfg, st, log, warnedSkips)
 
 		case sig := <-sigChan:
 			log.Info("Received %v, shutting down...", sig)
@@ -166,7 +169,7 @@ func maybeReloadConfig(configPath string, current *config.Config, lastModTime ti
 const MaxConsecutiveErrors = 5
 
 // runDaemonSync syncs all enabled, initialized projects.
-func runDaemonSync(cfg *config.Config, st *state.State, log *logger.Logger) {
+func runDaemonSync(cfg *config.Config, st *state.State, log *logger.Logger, warnedSkips map[string]bool) {
 	ctx := context.Background()
 
 	for _, project := range cfg.Projects {
@@ -175,7 +178,12 @@ func runDaemonSync(cfg *config.Config, st *state.State, log *logger.Logger) {
 		}
 
 		if !st.IsInitialized(project.Name) {
-			log.Debug("%s: skipped (not initialized)", project.Name)
+			if !warnedSkips[project.Name] {
+				log.Info("%s: skipped (not initialized, run: syncr init %s)", project.Name, project.Name)
+				warnedSkips[project.Name] = true
+			} else {
+				log.Debug("%s: skipped (not initialized)", project.Name)
+			}
 			continue
 		}
 
@@ -197,9 +205,9 @@ func runDaemonSync(cfg *config.Config, st *state.State, log *logger.Logger) {
 		}
 
 		if !pathExists(syncPath) {
-			log.Warn("%s: cloud path missing: %s", project.Name, syncPath)
-			log.Warn("  Fix: Run 'syncr init %s --force' to recreate cloud folder from local files", project.Name)
-			st.RecordError(project.Name, fmt.Errorf("cloud path missing: %s", syncPath))
+			log.Warn("%s: sync folder missing: %s", project.Name, syncPath)
+			log.Warn("  Fix: Run 'syncr init %s --force' to recreate sync folder from local files", project.Name)
+			st.RecordError(project.Name, fmt.Errorf("sync folder missing: %s", syncPath))
 			continue
 		}
 

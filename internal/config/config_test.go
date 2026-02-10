@@ -620,14 +620,14 @@ func TestValidateFull_NonexistentCloudPath(t *testing.T) {
 	}
 	result := cfg.ValidateFull()
 	found := false
-	cloudPath := filepath.Join(tmpDir, "proj")
+	syncFolderPath := filepath.Join(tmpDir, "proj")
 	for _, w := range result.Warnings {
-		if w == fmt.Sprintf("project proj: cloud path does not exist: %s", cloudPath) {
+		if w == fmt.Sprintf("project proj: sync folder does not exist: %s", syncFolderPath) {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("expected cloud path warning, got warnings: %v", result.Warnings)
+		t.Errorf("expected sync folder warning, got warnings: %v", result.Warnings)
 	}
 }
 

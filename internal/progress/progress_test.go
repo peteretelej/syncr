@@ -75,7 +75,7 @@ func TestVerboseFailPaths(t *testing.T) {
 
 	want := "Syncing foo... failed: connection timeout\n" +
 		"  local: /Users/you/Projects/photos\n" +
-		"  remote: /Users/you/OneDrive/syncr/photos\n"
+		"  sync folder: /Users/you/OneDrive/syncr/photos\n"
 	if got := buf.String(); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}

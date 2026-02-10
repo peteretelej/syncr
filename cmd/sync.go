@@ -128,9 +128,9 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 
 	if !pathExists(syncPath) {
 		prog.Start(project.Name)
-		prog.Fail(fmt.Errorf("cloud path missing: %s", syncPath), project.LocalPath, syncPath)
-		prog.Hint("Fix: Run 'syncr init %s --force' to recreate cloud folder from local files", project.Name)
-		st.RecordError(project.Name, fmt.Errorf("cloud path missing: %s", syncPath))
+		prog.Fail(fmt.Errorf("sync folder missing: %s", syncPath), project.LocalPath, syncPath)
+		prog.Hint("Fix: Run 'syncr init %s --force' to recreate sync folder from local files", project.Name)
+		st.RecordError(project.Name, fmt.Errorf("sync folder missing: %s", syncPath))
 		return "failed"
 	}
 
@@ -149,7 +149,9 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 	duration := time.Since(start)
 
 	if err != nil {
-		prog.Fail(err, project.LocalPath, syncPath)
+		friendly, raw := sync.FriendlyError(err)
+		prog.Fail(fmt.Errorf("%s", friendly), project.LocalPath, syncPath)
+		prog.Detail("rclone: %s", raw)
 		if !dryRun {
 			st.RecordError(project.Name, err)
 
