@@ -6,7 +6,7 @@ Keeps local folders in sync with cloud storage (OneDrive, Dropbox, Google Drive)
 
 ## What It Does
 
-- **Bidirectional sync** - changes flow both ways between local and cloud
+- **Bidirectional sync** - changes flow both ways between local and sync folder
 - **State tracking** - remembers sync history, detects conflicts
 - **Daemon mode** - continuous background sync with config hot-reload
 - **Multi-project** - sync multiple folders with one config
@@ -26,7 +26,7 @@ go install github.com/peteretelej/syncr@latest
 # Generate a starter config file
 syncr init
 
-# Edit syncr.json: set sync_root to your cloud storage path,
+# Edit syncr.json: set sync_root to your sync folder path,
 # then update the sample project or add your own
 
 # Add a project
@@ -44,7 +44,7 @@ You can also create `syncr.json` manually:
 ```json
 {
   "sync_root": "/Users/You/OneDrive/syncr",
-  "sync_interval_seconds": 300,
+  "sync_interval_minutes": 5,
   "projects": [
     {
       "name": "docs",
@@ -123,7 +123,7 @@ export SYNCR_CONFIG=~/syncr.json
 ```json
 {
   "sync_root": "/Users/You/OneDrive/syncr",
-  "sync_interval_seconds": 300,
+  "sync_interval_minutes": 5,
   "projects": [
     {
       "name": "docs",
@@ -137,8 +137,8 @@ export SYNCR_CONFIG=~/syncr.json
 
 | Field | Description |
 |-------|-------------|
-| `sync_root` | Base path in your cloud storage folder |
-| `sync_interval_seconds` | How often daemon syncs (minimum 60, default 300) |
+| `sync_root` | Base path for your sync folder |
+| `sync_interval_minutes` | How often daemon syncs, in minutes (minimum 1, default 5) |
 | `projects[].name` | Project identifier |
 | `projects[].local_path` | Absolute path to local folder |
 | `projects[].sync_path` | Subfolder name under sync_root |
@@ -149,11 +149,13 @@ export SYNCR_CONFIG=~/syncr.json
 syncr uses rclone's bisync under the hood. Files sync bidirectionally:
 
 ```
-Local Folder                      Cloud Storage
+Local Folder                      Sync Folder
 ~/Projects/myapp/docs  <------>  OneDrive/syncr/docs/
 ```
 
-**Local storage.** Logs, bisync working data, PID file, and sync state are all stored locally on your machine in your OS config directory, not in the cloud sync_root. This means each machine tracks its own sync history independently.
+Your sync folder can be a cloud storage path (OneDrive, Dropbox, Google Drive), a network drive, or any local folder.
+
+**Local storage.** Logs, bisync working data, PID file, and sync state are all stored locally on your machine in your OS config directory, not in the sync folder. This means each machine tracks its own sync history independently.
 
 | OS | Local data path |
 |----|----------------|
@@ -169,7 +171,7 @@ Within that directory:
 
 **Safety limits.** Sync aborts if more than 50% of files would be deleted, protecting against accidental bulk deletion.
 
-**Cloud storage** only contains the synced project files:
+**Sync folder** only contains the synced project files:
 
 ```
 {sync_root}/
@@ -186,9 +188,9 @@ syncr init myproject
 ```
 
 This handles the initial sync based on what exists:
-- **Local empty, cloud has files**: pulls from cloud
-- **Cloud empty, local has files**: pushes to cloud
-- **Both have files**: merges (keeps superset)
+- **Local empty, sync folder has files**: pulls from sync folder
+- **Sync folder empty, local has files**: pushes to sync folder
+- **Both have files**: merges (files from both sides will be kept)
 - **Both empty**: marks initialized, nothing to sync
 
 To initialize all uninitialized enabled projects at once:
@@ -199,13 +201,18 @@ syncr init
 
 ## Conflicts
 
-When the same file changes in both locations, rclone creates conflict files (e.g., `file.txt.conflict1`). Check for conflicts:
+When the same file changes in both locations between syncs, rclone creates conflict files. Check for conflicts:
 
 ```bash
 syncr status
 ```
 
-Resolve conflicts manually by keeping the version you want.
+To resolve:
+
+1. Open the original file and the `.conflict1` copy side by side
+2. Keep the version you want (or merge changes manually)
+3. Delete the `.conflict1` file
+4. Run `syncr sync` to propagate the resolution
 
 ## Build from Source
 

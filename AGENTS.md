@@ -42,7 +42,7 @@ internal/sync/bisync.go --> rclone bisync --> sync_root/{project}/
 ```json
 {
   "sync_root": "/Users/you/OneDrive/syncr",
-  "sync_interval_seconds": 300,
+  "sync_interval_minutes": 5,
   "projects": [
     {
       "name": "docs",
@@ -89,7 +89,7 @@ syncr status
 
 ### Modify sync interval
 
-Change `sync_interval_seconds` in `syncr.json` (minimum 60, default 300).
+Change `sync_interval_minutes` in `syncr.json` (minimum 1, default 5).
 
 ## Testing
 
@@ -131,13 +131,9 @@ syncr/
 └── syncr.json           # User config (not in repo)
 ```
 
-Cloud storage structure:
+Sync folder structure:
 ```
 {sync_root}/
-├── _syncr/
-│   ├── state.json       # Sync state
-│   ├── logs/            # Log files
-│   └── bisync/          # rclone working data
 ├── {project1}/          # Synced files
 └── {project2}/          # Synced files
 ```

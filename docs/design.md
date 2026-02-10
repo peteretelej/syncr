@@ -30,7 +30,7 @@ Lightweight bidirectional folder sync. Single Go binary with rclone embedded. Wo
 ## Data Flow
 
 ```
-Local Folders                Cloud Storage
+Local Folders                Sync Folder
     |                            |
     +-> ~/Projects/app/docs      |
     +-> ~/Notes/research    <--> +-> OneDrive/syncr/docs/
@@ -81,14 +81,9 @@ User config (not in repo):
 ./syncr.json                 # Working directory
 ```
 
-Cloud storage:
+Sync folder:
 ```
 {sync_root}/
-├── _syncr/
-│   ├── state.json           # Sync state (travels with data)
-│   ├── logs/
-│   │   └── syncr_YYYYMMDD.log
-│   └── bisync/              # rclone working data
 ├── {project1}/              # Synced files
 └── {project2}/              # Synced files
 ```
@@ -120,8 +115,8 @@ Configuration loading and validation.
 
 ```go
 type Config struct {
-    SyncRoot           string    `json:"sync_root"`
-    SyncIntervalSeconds int       `json:"sync_interval_seconds"`
+    SyncRoot            string    `json:"sync_root"`
+    SyncIntervalMinutes int       `json:"sync_interval_minutes"`
     Projects            []Project `json:"projects"`
 }
 
@@ -136,12 +131,12 @@ type Project struct {
 Responsibilities:
 - Load from `syncr.json` or `-config` path
 - Validate paths exist and are absolute
-- Apply defaults (sync interval = 300s)
-- Compute `SyncrDataDir()` as `{sync_root}/_syncr`
+- Apply defaults (sync interval = 5 minutes)
+- Compute `SyncrDataDir()` for local state storage
 
 ### internal/state
 
-Sync state tracking. State file lives in cloud storage so it's shared across machines.
+Sync state tracking. State is stored locally per-machine in `{UserConfigDir}/syncr/`.
 
 ```go
 type State struct {
@@ -232,7 +227,7 @@ Format:
 ```json
 {
   "sync_root": "/Users/you/OneDrive/syncr",
-  "sync_interval_seconds": 300,
+  "sync_interval_minutes": 5,
   "projects": [
     {
       "name": "docs",
@@ -246,8 +241,8 @@ Format:
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `sync_root` | string | required | Base path in cloud storage |
-| `sync_interval_seconds` | int | 300 | Daemon sync interval (min 60) |
+| `sync_root` | string | required | Base path for sync folder |
+| `sync_interval_minutes` | int | 5 | Daemon sync interval in minutes (min 1) |
 | `projects` | array | required | List of projects to sync |
 | `projects[].name` | string | required | Project identifier |
 | `projects[].local_path` | string | required | Absolute local path |
@@ -258,18 +253,18 @@ Format:
 
 Before first sync, projects must be initialized. The init command handles different starting states:
 
-| Local | Cloud | Action |
-|-------|-------|--------|
-| Empty | Has files | Resync with `--resync-mode path2` (cloud wins) |
+| Local | Sync Folder | Action |
+|-------|-------------|--------|
+| Empty | Has files | Resync with `--resync-mode path2` (sync folder wins) |
 | Has files | Empty | Resync with `--resync-mode path1` (local wins) |
 | Empty | Empty | Mark initialized, nothing to sync |
-| Has files | Has files | Resync (keeps superset of both) |
+| Has files | Has files | Resync (files from both sides will be kept) |
 
 ## Daemon Mode
 
 Continuous sync loop:
 1. Initial sync on startup
-2. Wait for `sync_interval_seconds`
+2. Wait for `sync_interval_minutes`
 3. Sync all enabled, initialized projects
 4. Handle SIGINT/SIGTERM for graceful shutdown
 5. Write PID file to `_syncr/syncr.pid`
@@ -296,7 +291,7 @@ The `status` command counts and lists conflicts. Resolution is manual - user kee
 | Config not found | Exit with error message |
 | Invalid config | Exit with validation errors |
 | Missing local path | Skip project, log warning |
-| Missing cloud path | Create directory |
+| Missing sync folder path | Create directory |
 | Bisync failure | Log error, continue to next project |
 | Max errors hit | Skip project, suggest re-init |
 
