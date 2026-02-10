@@ -128,7 +128,6 @@ syncr/
 │   ├── sync/            # Bisync wrapper
 │   └── logger/          # Logging
 ├── tests/               # Integration tests
-├── _docs/               # Design docs, plans
 └── syncr.json           # User config (not in repo)
 ```
 

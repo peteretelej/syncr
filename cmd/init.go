@@ -224,21 +224,21 @@ func initProject(cfg *config.Config, st *state.State, project *config.Project, v
 		return nil
 	default:
 		resyncMode = sync.ResyncNone
-		actionDesc = "Both folders have files. Merging (keeping superset)..."
+		actionDesc = "Both folders have files. Merging (files from both sides will be kept)..."
 	}
 
 	fmt.Println(actionDesc)
 
 	if dryRun {
 		fmt.Println()
-		fmt.Println(color.CyanString("[DRY-RUN] Would run bisync with --resync"))
+		fmt.Println(color.CyanString("[DRY-RUN] Would run initial sync"))
 		fmt.Printf("%s\n", color.CyanString("[DRY-RUN] Would mark project %q as initialized", project.Name))
 		return nil
 	}
 
 	// Run bisync with resync
 	fmt.Println()
-	fmt.Println("Running bisync with --resync...")
+	fmt.Println("Running initial sync...")
 
 	opts := sync.BisyncOptions{
 		Resync:       true,

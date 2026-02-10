@@ -58,10 +58,10 @@ func Status(configPath string) {
 	}
 
 	// Header
-	fmt.Printf("  %-*s  %-12s  %-18s  %s\n", maxNameLen, "Name", "Status", "Last Sync", "Conflicts")
+	fmt.Printf("  %-*s  %-16s  %-18s  %s\n", maxNameLen, "Name", "Status", "Last Sync", "Conflicts")
 	fmt.Printf("  %s  %s  %s  %s\n",
 		repeatStr("-", maxNameLen),
-		repeatStr("-", 12),
+		repeatStr("-", 16),
 		repeatStr("-", 18),
 		repeatStr("-", 9))
 
@@ -77,9 +77,9 @@ func Status(configPath string) {
 		if !project.Enabled {
 			statusPlain = "disabled"
 		} else if !ps.Initialized {
-			statusPlain = "not init"
+			statusPlain = "not initialized"
 		} else if ps.LastSyncStatus == "error" {
-			statusPlain = fmt.Sprintf("error (%d)", ps.ErrorCount)
+			statusPlain = fmt.Sprintf("%d errors", ps.ErrorCount)
 		} else if ps.LastSyncStatus == "conflicts" {
 			statusPlain = "conflicts"
 		} else {
@@ -87,7 +87,7 @@ func Status(configPath string) {
 		}
 
 		// Pad plain string first, then colorize (ANSI codes break %-*s padding)
-		paddedStatus := fmt.Sprintf("%-12s", statusPlain)
+		paddedStatus := fmt.Sprintf("%-16s", statusPlain)
 		coloredStatus := colorizeStatus(paddedStatus, statusPlain)
 
 		// Format last sync time
@@ -131,6 +131,8 @@ func Status(configPath string) {
 				fmt.Printf("    %s\n", f)
 			}
 		}
+		fmt.Println()
+		fmt.Println(color.YellowString("Resolve by keeping the version you want and deleting .conflict1 files."))
 	}
 }
 
@@ -146,11 +148,11 @@ func colorizeStatus(padded, plain string) string {
 		return color.GreenString(padded)
 	case plain == "disabled":
 		return color.New(color.Faint).Sprint(padded)
-	case plain == "not init":
+	case plain == "not initialized":
 		return color.RedString(padded)
 	case plain == "conflicts":
 		return color.YellowString(padded)
-	case len(plain) >= 5 && plain[:5] == "error":
+	case len(plain) >= 6 && plain[len(plain)-6:] == "errors":
 		return color.RedString(padded)
 	default:
 		return padded

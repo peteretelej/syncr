@@ -43,13 +43,13 @@ func TestDryRunPrefix(t *testing.T) {
 	}
 }
 
-func TestVerboseConflicts(t *testing.T) {
+func TestConflictsAlwaysShown(t *testing.T) {
 	var buf bytes.Buffer
-	p := New(&buf, false, true)
+	p := New(&buf, false, false) // verbose=false: conflicts still shown
 	p.Start("foo")
 	p.Done(1*time.Second, 3)
 
-	want := "Syncing foo... done (1.0s)\n  3 conflict(s) detected\n"
+	want := "Syncing foo... done (1.0s)\n  3 conflict(s) detected\n  Run 'syncr status' to see conflict details\n"
 	if got := buf.String(); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -142,7 +142,7 @@ func TestDryRunVerbose(t *testing.T) {
 	p.Start("docs")
 	p.Done(3200*time.Millisecond, 2)
 
-	want := "[dry-run] Syncing docs... done (3.2s)\n  2 conflict(s) detected\n"
+	want := "[dry-run] Syncing docs... done (3.2s)\n  2 conflict(s) detected\n  Run 'syncr status' to see conflict details\n"
 	if got := buf.String(); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
@@ -154,7 +154,7 @@ func TestConflictsShownWithoutVerbose(t *testing.T) {
 	p.Start("foo")
 	p.Done(1*time.Second, 2)
 
-	want := "Syncing foo... done (1.0s)\n  2 conflict(s) detected\n"
+	want := "Syncing foo... done (1.0s)\n  2 conflict(s) detected\n  Run 'syncr status' to see conflict details\n"
 	if got := buf.String(); got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}

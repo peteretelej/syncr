@@ -42,6 +42,7 @@ func (p *Progress) Done(duration time.Duration, conflicts int) {
 	fmt.Fprintf(p.out, " %s\n", color.GreenString("done (%s)", formatDuration(duration)))
 	if conflicts > 0 {
 		fmt.Fprintf(p.out, "  %s\n", color.YellowString("%d conflict(s) detected", conflicts))
+		p.Hint("Run 'syncr status' to see conflict details")
 	}
 }
 
