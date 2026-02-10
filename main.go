@@ -80,9 +80,12 @@ Commands:
   help                Show this help message
 
 Options:
-  -config, -c string  Path to config file (default: ./syncr.json)
+  -config, -c string  Path to config file (default: $SYNCR_CONFIG or ./syncr.json)
   -verbose          Enable verbose output
   -dry-run          Show what would be synced without making changes
+
+Environment Variables:
+  SYNCR_CONFIG    Path to config file (overridden by -config flag)
 
 Examples:
   syncr init                   Initialize all uninitialized enabled projects

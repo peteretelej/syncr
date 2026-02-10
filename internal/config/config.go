@@ -47,9 +47,13 @@ type Project struct {
 // Load loads configuration from the specified path or default location.
 // Search order:
 // 1. Explicit configPath (if provided)
-// 2. ./syncr.json (current working directory)
+// 2. SYNCR_CONFIG environment variable
+// 3. ./syncr.json (current working directory)
 func Load(configPath string) (*Config, error) {
 	path := configPath
+	if path == "" {
+		path = os.Getenv("SYNCR_CONFIG")
+	}
 	if path == "" {
 		path = "syncr.json"
 	}
