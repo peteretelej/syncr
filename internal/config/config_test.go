@@ -1395,6 +1395,350 @@ func TestSave_DoesNotInjectRetention(t *testing.T) {
 	}
 }
 
+func TestLoad_WithConflictResolve(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "syncr.json")
+	localPath := filepath.Join(tmpDir, "local")
+
+	configContent := `{
+		"sync_root": "` + jsonEscape(tmpDir) + `",
+		"sync_interval_minutes": 5,
+		"conflict_resolve": "newer",
+		"conflict_suffix": "_CONFLICT",
+		"projects": [
+			{
+				"name": "proj",
+				"local_path": "` + jsonEscape(localPath) + `",
+				"sync_path": "proj",
+				"enabled": true,
+				"conflict_resolve": "larger"
+			}
+		]
+	}`
+
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.ConflictResolve != "newer" {
+		t.Errorf("ConflictResolve = %q, want %q", cfg.ConflictResolve, "newer")
+	}
+	if cfg.ConflictSuffix != "_CONFLICT" {
+		t.Errorf("ConflictSuffix = %q, want %q", cfg.ConflictSuffix, "_CONFLICT")
+	}
+	if cfg.Projects[0].ConflictResolve != "larger" {
+		t.Errorf("Projects[0].ConflictResolve = %q, want %q", cfg.Projects[0].ConflictResolve, "larger")
+	}
+}
+
+func TestResolvedConflictResolve_Precedence(t *testing.T) {
+	tests := []struct {
+		name           string
+		globalResolve  string
+		projectResolve string
+		want           string
+	}{
+		{
+			name:           "project override set",
+			globalResolve:  "newer",
+			projectResolve: "larger",
+			want:           "larger",
+		},
+		{
+			name:           "only global set",
+			globalResolve:  "newer",
+			projectResolve: "",
+			want:           "newer",
+		},
+		{
+			name:           "neither set",
+			globalResolve:  "",
+			projectResolve: "",
+			want:           "",
+		},
+		{
+			name:           "project set different than global",
+			globalResolve:  "path1",
+			projectResolve: "smaller",
+			want:           "smaller",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &Config{
+				ConflictResolve: tt.globalResolve,
+				Projects: []Project{
+					{Name: "proj", ConflictResolve: tt.projectResolve},
+				},
+			}
+			got := cfg.ResolvedConflictResolve("proj")
+			if got != tt.want {
+				t.Errorf("ResolvedConflictResolve() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+
+	// Test with nonexistent project falls back to global
+	t.Run("nonexistent project returns global", func(t *testing.T) {
+		cfg := &Config{
+			ConflictResolve: "path2",
+			Projects:        []Project{},
+		}
+		got := cfg.ResolvedConflictResolve("nonexistent")
+		if got != "path2" {
+			t.Errorf("ResolvedConflictResolve(nonexistent) = %q, want %q", got, "path2")
+		}
+	})
+}
+
+func TestResolvedConflictSuffix(t *testing.T) {
+	t.Run("custom suffix", func(t *testing.T) {
+		cfg := &Config{ConflictSuffix: "_CONFLICT"}
+		got := cfg.ResolvedConflictSuffix()
+		if got != "_CONFLICT" {
+			t.Errorf("ResolvedConflictSuffix() = %q, want %q", got, "_CONFLICT")
+		}
+	})
+
+	t.Run("empty when not set", func(t *testing.T) {
+		cfg := &Config{}
+		got := cfg.ResolvedConflictSuffix()
+		if got != "" {
+			t.Errorf("ResolvedConflictSuffix() = %q, want %q", got, "")
+		}
+	})
+}
+
+func TestValidate_InvalidConflictResolve(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	t.Run("invalid global value", func(t *testing.T) {
+		cfg := Config{
+			SyncRoot:            tmpDir,
+			SyncIntervalMinutes: 300,
+			ConflictResolve:     "bogus",
+		}
+		err := cfg.Validate()
+		if err == nil {
+			t.Fatal("expected error for invalid conflict_resolve")
+		}
+		want := `invalid conflict_resolve value: "bogus"`
+		if err.Error() != want {
+			t.Errorf("error = %q, want %q", err.Error(), want)
+		}
+	})
+
+	t.Run("invalid project value", func(t *testing.T) {
+		cfg := Config{
+			SyncRoot:            tmpDir,
+			SyncIntervalMinutes: 300,
+			Projects: []Project{
+				{Name: "proj", LocalPath: tmpDir, SyncPath: "proj", Enabled: true, ConflictResolve: "invalid"},
+			},
+		}
+		err := cfg.Validate()
+		if err == nil {
+			t.Fatal("expected error for invalid project conflict_resolve")
+		}
+		want := `project proj: invalid conflict_resolve value: "invalid"`
+		if err.Error() != want {
+			t.Errorf("error = %q, want %q", err.Error(), want)
+		}
+	})
+}
+
+func TestValidate_ValidConflictResolve(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	validValues := []string{"none", "newer", "older", "larger", "smaller", "path1", "path2"}
+
+	for _, v := range validValues {
+		t.Run("global_"+v, func(t *testing.T) {
+			cfg := Config{
+				SyncRoot:            tmpDir,
+				SyncIntervalMinutes: 300,
+				ConflictResolve:     v,
+				Projects: []Project{
+					{Name: "proj", LocalPath: tmpDir, SyncPath: "proj", Enabled: true},
+				},
+			}
+			if err := cfg.Validate(); err != nil {
+				t.Errorf("Validate() rejected valid conflict_resolve %q: %v", v, err)
+			}
+		})
+
+		t.Run("project_"+v, func(t *testing.T) {
+			cfg := Config{
+				SyncRoot:            tmpDir,
+				SyncIntervalMinutes: 300,
+				Projects: []Project{
+					{Name: "proj", LocalPath: tmpDir, SyncPath: "proj", Enabled: true, ConflictResolve: v},
+				},
+			}
+			if err := cfg.Validate(); err != nil {
+				t.Errorf("Validate() rejected valid project conflict_resolve %q: %v", v, err)
+			}
+		})
+	}
+}
+
+func TestValidateFull_ConflictResolveWarnings(t *testing.T) {
+	tmpDir := t.TempDir()
+	localDir := filepath.Join(tmpDir, "local")
+	cloudDir := filepath.Join(tmpDir, "proj")
+	os.MkdirAll(localDir, 0755)
+	os.MkdirAll(cloudDir, 0755)
+
+	t.Run("global newer warns", func(t *testing.T) {
+		cfg := Config{
+			SyncRoot:            tmpDir,
+			SyncIntervalMinutes: 300,
+			ConflictResolve:     "newer",
+			Projects: []Project{
+				{Name: "proj", LocalPath: localDir, SyncPath: "proj", Enabled: true},
+			},
+		}
+		result := cfg.ValidateFull()
+		if len(result.Errors) > 0 {
+			t.Errorf("expected no errors, got %v", result.Errors)
+		}
+		found := false
+		for _, w := range result.Warnings {
+			if w == `conflict_resolve "newer" depends on modtime accuracy; may silently fall back to none` {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected newer warning, got warnings: %v", result.Warnings)
+		}
+	})
+
+	t.Run("global older warns", func(t *testing.T) {
+		cfg := Config{
+			SyncRoot:            tmpDir,
+			SyncIntervalMinutes: 300,
+			ConflictResolve:     "older",
+			Projects: []Project{
+				{Name: "proj", LocalPath: localDir, SyncPath: "proj", Enabled: true},
+			},
+		}
+		result := cfg.ValidateFull()
+		found := false
+		for _, w := range result.Warnings {
+			if w == `conflict_resolve "older" depends on modtime accuracy; may silently fall back to none` {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected older warning, got warnings: %v", result.Warnings)
+		}
+	})
+
+	t.Run("project newer warns", func(t *testing.T) {
+		cfg := Config{
+			SyncRoot:            tmpDir,
+			SyncIntervalMinutes: 300,
+			Projects: []Project{
+				{Name: "proj", LocalPath: localDir, SyncPath: "proj", Enabled: true, ConflictResolve: "newer"},
+			},
+		}
+		result := cfg.ValidateFull()
+		found := false
+		for _, w := range result.Warnings {
+			if w == `project proj: conflict_resolve "newer" depends on modtime accuracy; may silently fall back to none` {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected project newer warning, got warnings: %v", result.Warnings)
+		}
+	})
+
+	t.Run("project older warns", func(t *testing.T) {
+		cfg := Config{
+			SyncRoot:            tmpDir,
+			SyncIntervalMinutes: 300,
+			Projects: []Project{
+				{Name: "proj", LocalPath: localDir, SyncPath: "proj", Enabled: true, ConflictResolve: "older"},
+			},
+		}
+		result := cfg.ValidateFull()
+		found := false
+		for _, w := range result.Warnings {
+			if w == `project proj: conflict_resolve "older" depends on modtime accuracy; may silently fall back to none` {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected project older warning, got warnings: %v", result.Warnings)
+		}
+	})
+
+	t.Run("larger does not warn", func(t *testing.T) {
+		cfg := Config{
+			SyncRoot:            tmpDir,
+			SyncIntervalMinutes: 300,
+			ConflictResolve:     "larger",
+			Projects: []Project{
+				{Name: "proj", LocalPath: localDir, SyncPath: "proj", Enabled: true},
+			},
+		}
+		result := cfg.ValidateFull()
+		for _, w := range result.Warnings {
+			if strings.Contains(w, "conflict_resolve") {
+				t.Errorf("unexpected conflict_resolve warning for 'larger': %s", w)
+			}
+		}
+	})
+
+	t.Run("invalid global is error not warning", func(t *testing.T) {
+		cfg := Config{
+			SyncRoot:            tmpDir,
+			SyncIntervalMinutes: 300,
+			ConflictResolve:     "bogus",
+			Projects: []Project{
+				{Name: "proj", LocalPath: localDir, SyncPath: "proj", Enabled: true},
+			},
+		}
+		result := cfg.ValidateFull()
+		found := false
+		for _, e := range result.Errors {
+			if e == `invalid conflict_resolve value: "bogus"` {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected invalid conflict_resolve error, got errors: %v", result.Errors)
+		}
+	})
+
+	t.Run("invalid project is error not warning", func(t *testing.T) {
+		cfg := Config{
+			SyncRoot:            tmpDir,
+			SyncIntervalMinutes: 300,
+			Projects: []Project{
+				{Name: "proj", LocalPath: localDir, SyncPath: "proj", Enabled: true, ConflictResolve: "nope"},
+			},
+		}
+		result := cfg.ValidateFull()
+		found := false
+		for _, e := range result.Errors {
+			if e == `project proj: invalid conflict_resolve value: "nope"` {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected invalid project conflict_resolve error, got errors: %v", result.Errors)
+		}
+	})
+}
+
 func TestValidateFull_ExcludePatterns(t *testing.T) {
 	tmpDir := t.TempDir()
 	localDir := filepath.Join(tmpDir, "local")

@@ -27,11 +27,24 @@ func (v ValidationResult) HasIssues() bool {
 	return len(v.Errors) > 0 || len(v.Warnings) > 0
 }
 
+// validConflictResolve defines the accepted values for conflict_resolve.
+var validConflictResolve = map[string]bool{
+	"none":    true,
+	"newer":   true,
+	"older":   true,
+	"larger":  true,
+	"smaller": true,
+	"path1":   true,
+	"path2":   true,
+}
+
 // Config represents the syncr configuration.
 type Config struct {
 	SyncRoot                string    `json:"sync_root"`
 	SyncIntervalMinutes     int       `json:"sync_interval_minutes"`
 	BackupRetentionDaysJSON *int      `json:"backup_retention_days,omitempty"`
+	ConflictResolve         string    `json:"conflict_resolve,omitempty"`
+	ConflictSuffix          string    `json:"conflict_suffix,omitempty"`
 	Projects                []Project `json:"projects"`
 
 	path                string // file path (not serialized)
@@ -56,6 +69,7 @@ type Project struct {
 	HookTimeoutSeconds int               `json:"hook_timeout_seconds,omitempty"`
 	Derived            map[string]string `json:"derived,omitempty"`
 	BackupDir          bool              `json:"backup_dir,omitempty"`
+	ConflictResolve    string            `json:"conflict_resolve,omitempty"`
 }
 
 // Load loads configuration from the specified path or default location.
@@ -150,6 +164,11 @@ func (c *Config) Validate() error {
 		return errors.New("sync_interval_minutes must be at least 1")
 	}
 
+	// Validate global conflict_resolve
+	if c.ConflictResolve != "" && !validConflictResolve[c.ConflictResolve] {
+		return fmt.Errorf("invalid conflict_resolve value: %q", c.ConflictResolve)
+	}
+
 	// Check for duplicate project names and overlapping sync paths
 	names := make(map[string]bool)
 	syncPaths := make([]string, 0, len(c.Projects))
@@ -177,6 +196,11 @@ func (c *Config) Validate() error {
 		// Validate hook_timeout_seconds
 		if p.HookTimeoutSeconds < 0 {
 			// Negative treated as default; warn via ValidateFull only
+		}
+
+		// Validate conflict_resolve
+		if p.ConflictResolve != "" && !validConflictResolve[p.ConflictResolve] {
+			return fmt.Errorf("project %s: invalid conflict_resolve value: %q", p.Name, p.ConflictResolve)
 		}
 
 		// Validate sync_path: check for duplicates and overlapping paths
@@ -249,6 +273,15 @@ func (c *Config) ValidateFull() ValidationResult {
 		result.Errors = append(result.Errors, "sync_interval_minutes must be at least 1")
 	}
 
+	// Validate global conflict_resolve
+	if c.ConflictResolve != "" {
+		if !validConflictResolve[c.ConflictResolve] {
+			result.Errors = append(result.Errors, fmt.Sprintf("invalid conflict_resolve value: %q", c.ConflictResolve))
+		} else if c.ConflictResolve == "newer" || c.ConflictResolve == "older" {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("conflict_resolve %q depends on modtime accuracy; may silently fall back to none", c.ConflictResolve))
+		}
+	}
+
 	names := make(map[string]bool)
 	syncPaths := make([]string, 0, len(c.Projects))
 	enabledCount := 0
@@ -286,6 +319,15 @@ func (c *Config) ValidateFull() ValidationResult {
 		// Validate hook_timeout_seconds
 		if p.HookTimeoutSeconds < 0 {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("project %s: negative hook_timeout_seconds (%d), using default (30s)", p.Name, p.HookTimeoutSeconds))
+		}
+
+		// Validate conflict_resolve
+		if p.ConflictResolve != "" {
+			if !validConflictResolve[p.ConflictResolve] {
+				result.Errors = append(result.Errors, fmt.Sprintf("project %s: invalid conflict_resolve value: %q", p.Name, p.ConflictResolve))
+			} else if p.ConflictResolve == "newer" || p.ConflictResolve == "older" {
+				result.Warnings = append(result.Warnings, fmt.Sprintf("project %s: conflict_resolve %q depends on modtime accuracy; may silently fall back to none", p.Name, p.ConflictResolve))
+			}
 		}
 
 		// Check sync_path duplicates and overlaps
@@ -401,6 +443,22 @@ func (c *Config) GetProject(name string) *Project {
 // Defaults to 30 if not set in the config file.
 func (c *Config) BackupRetentionDays() int {
 	return c.backupRetentionDays
+}
+
+// ResolvedConflictResolve returns the effective conflict resolution strategy
+// for the named project. Project-level overrides take precedence over the
+// global setting. Returns "" when no strategy is configured.
+func (c *Config) ResolvedConflictResolve(projectName string) string {
+	if p := c.GetProject(projectName); p != nil && p.ConflictResolve != "" {
+		return p.ConflictResolve
+	}
+	return c.ConflictResolve
+}
+
+// ResolvedConflictSuffix returns the configured conflict suffix, or ""
+// if none is set (meaning rclone's default should be used).
+func (c *Config) ResolvedConflictSuffix() string {
+	return c.ConflictSuffix
 }
 
 // TrashDir returns the trash directory path for a given project.
