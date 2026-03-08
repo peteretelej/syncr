@@ -48,7 +48,16 @@ internal/sync/bisync.go --> rclone bisync --> sync_root/{project}/
       "name": "docs",
       "local_path": "/Users/you/Projects/app/docs",
       "sync_path": "docs",
-      "enabled": true
+      "enabled": true,
+      "exclude": ["*.db", ".cache/"],
+      "hooks": {
+        "post_sync": "./rebuild.sh",
+        "on_conflict": "echo 'conflict detected'"
+      },
+      "hook_timeout_seconds": 60,
+      "derived": {
+        "*.db": "Search index, rebuilt by post_sync hook"
+      }
     }
   ]
 }

@@ -162,6 +162,28 @@ func Status(configPath string) {
 		fmt.Println()
 		fmt.Println(color.YellowString("Resolve by keeping the version you want and deleting .conflict1 files."))
 	}
+
+	// Show derived file info if any project has derived entries
+	hasDerived := false
+	for _, p := range cfg.Projects {
+		if len(p.Derived) > 0 {
+			hasDerived = true
+			break
+		}
+	}
+	if hasDerived {
+		fmt.Println()
+		fmt.Println("Derived files:")
+		for _, p := range cfg.Projects {
+			if len(p.Derived) == 0 {
+				continue
+			}
+			fmt.Printf("  %s:\n", p.Name)
+			for pattern, description := range p.Derived {
+				fmt.Printf("    %s - %s\n", pattern, description)
+			}
+		}
+	}
 }
 
 type conflictInfo struct {

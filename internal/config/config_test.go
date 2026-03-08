@@ -989,6 +989,150 @@ func TestHooks_OmitemptyJSON(t *testing.T) {
 	}
 }
 
+func TestLoad_WithDerived(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "syncr.json")
+	localPath := filepath.Join(tmpDir, "local")
+
+	configContent := `{
+		"sync_root": "` + jsonEscape(tmpDir) + `",
+		"sync_interval_minutes": 5,
+		"projects": [
+			{
+				"name": "notes",
+				"local_path": "` + jsonEscape(localPath) + `",
+				"sync_path": "notes",
+				"enabled": true,
+				"exclude": ["*.db"],
+				"derived": {
+					"*.db": "Rebuilt from *.md files via post_sync hook"
+				}
+			}
+		]
+	}`
+
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	p := cfg.Projects[0]
+	if p.Derived == nil {
+		t.Fatal("Derived should not be nil")
+	}
+	if len(p.Derived) != 1 {
+		t.Fatalf("len(Derived) = %d, want 1", len(p.Derived))
+	}
+	want := "Rebuilt from *.md files via post_sync hook"
+	if got := p.Derived["*.db"]; got != want {
+		t.Errorf("Derived[*.db] = %q, want %q", got, want)
+	}
+}
+
+func TestLoad_WithoutDerived(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "syncr.json")
+	localPath := filepath.Join(tmpDir, "local")
+
+	configContent := `{
+		"sync_root": "` + jsonEscape(tmpDir) + `",
+		"sync_interval_minutes": 5,
+		"projects": [
+			{
+				"name": "plain",
+				"local_path": "` + jsonEscape(localPath) + `",
+				"sync_path": "plain",
+				"enabled": true
+			}
+		]
+	}`
+
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	p := cfg.Projects[0]
+	if p.Derived != nil {
+		t.Errorf("Derived should be nil when not specified, got %v", p.Derived)
+	}
+}
+
+func TestLoad_WithEmptyDerived(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "syncr.json")
+	localPath := filepath.Join(tmpDir, "local")
+
+	configContent := `{
+		"sync_root": "` + jsonEscape(tmpDir) + `",
+		"sync_interval_minutes": 5,
+		"projects": [
+			{
+				"name": "empty",
+				"local_path": "` + jsonEscape(localPath) + `",
+				"sync_path": "empty",
+				"enabled": true,
+				"derived": {}
+			}
+		]
+	}`
+
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	p := cfg.Projects[0]
+	// Empty map from JSON unmarshalling is non-nil but has length 0
+	if len(p.Derived) != 0 {
+		t.Errorf("len(Derived) = %d, want 0", len(p.Derived))
+	}
+}
+
+func TestDerived_OmitemptyJSON(t *testing.T) {
+	// Verify that nil map with omitempty correctly omits from JSON
+	p := Project{
+		Name:      "test",
+		LocalPath: "/tmp/test",
+		SyncPath:  "test",
+		Enabled:   true,
+	}
+
+	data, err := json.Marshal(p)
+	if err != nil {
+		t.Fatalf("Marshal error: %v", err)
+	}
+
+	jsonStr := string(data)
+	if strings.Contains(jsonStr, "derived") {
+		t.Errorf("JSON should not contain 'derived' when Derived is nil, got: %s", jsonStr)
+	}
+
+	// With entries, it should appear
+	p.Derived = map[string]string{"*.db": "rebuilt by hook"}
+	data, err = json.Marshal(p)
+	if err != nil {
+		t.Fatalf("Marshal error: %v", err)
+	}
+
+	jsonStr = string(data)
+	if !strings.Contains(jsonStr, "derived") {
+		t.Errorf("JSON should contain 'derived' when Derived has entries, got: %s", jsonStr)
+	}
+}
+
 func TestValidateFull_ExcludePatterns(t *testing.T) {
 	tmpDir := t.TempDir()
 	localDir := filepath.Join(tmpDir, "local")

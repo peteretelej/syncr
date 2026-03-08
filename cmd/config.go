@@ -50,6 +50,12 @@ func ShowConfig(configPath string) {
 				fmt.Printf("    hook_timeout: %ds\n", p.HookTimeoutSeconds)
 			}
 		}
+		if len(p.Derived) > 0 {
+			fmt.Println("    derived:")
+			for pattern, description := range p.Derived {
+				fmt.Printf("      %s: %s\n", pattern, description)
+			}
+		}
 		fmt.Println()
 	}
 

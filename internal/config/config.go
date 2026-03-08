@@ -44,13 +44,14 @@ type Hooks struct {
 
 // Project represents a single sync project.
 type Project struct {
-	Name               string   `json:"name"`
-	LocalPath          string   `json:"local_path"`
-	SyncPath           string   `json:"sync_path"`
-	Enabled            bool     `json:"enabled"`
-	Exclude            []string `json:"exclude,omitempty"`
-	Hooks              *Hooks   `json:"hooks,omitempty"`
-	HookTimeoutSeconds int      `json:"hook_timeout_seconds,omitempty"`
+	Name               string            `json:"name"`
+	LocalPath          string            `json:"local_path"`
+	SyncPath           string            `json:"sync_path"`
+	Enabled            bool              `json:"enabled"`
+	Exclude            []string          `json:"exclude,omitempty"`
+	Hooks              *Hooks            `json:"hooks,omitempty"`
+	HookTimeoutSeconds int               `json:"hook_timeout_seconds,omitempty"`
+	Derived            map[string]string `json:"derived,omitempty"`
 }
 
 // Load loads configuration from the specified path or default location.
