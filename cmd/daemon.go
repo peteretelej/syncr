@@ -223,7 +223,7 @@ func runDaemonSync(ctx context.Context, cfg *config.Config, st *state.State, log
 			log.Debug("%s: snapshot warning (sync folder): %v", project.Name, snapE)
 			snapErr = true
 		}
-		preConflicts, _ := sync.CountConflicts(syncPath)
+		preConflicts, _ := sync.CountConflicts(syncPath, cfg.ResolvedConflictSuffix())
 
 		start := time.Now()
 
@@ -269,7 +269,7 @@ func runDaemonSync(ctx context.Context, cfg *config.Config, st *state.State, log
 		}
 
 		// Check for conflicts
-		conflictCount, _ := sync.CountConflicts(syncPath)
+		conflictCount, _ := sync.CountConflicts(syncPath, cfg.ResolvedConflictSuffix())
 
 		if conflictCount > 0 {
 			log.Warn("%s: synced with %d conflict(s) (%v)", project.Name, conflictCount, duration.Round(time.Millisecond))

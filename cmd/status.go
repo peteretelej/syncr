@@ -121,7 +121,7 @@ func Status(configPath string) {
 		conflictCount := 0
 		var conflicts []string
 		if ps.Initialized && pathExists(syncPath) {
-			conflicts, _ = sync.ListConflicts(syncPath)
+			conflicts, _ = sync.ListConflicts(syncPath, cfg.ResolvedConflictSuffix())
 			conflictCount = len(conflicts)
 			if conflictCount > 0 {
 				allConflicts = append(allConflicts, conflictInfo{
@@ -160,7 +160,11 @@ func Status(configPath string) {
 			}
 		}
 		fmt.Println()
-		fmt.Println(color.YellowString("Resolve by keeping the version you want and deleting .conflict1 files."))
+		suffix := cfg.ResolvedConflictSuffix()
+		if suffix == "" {
+			suffix = "conflict"
+		}
+		fmt.Println(color.YellowString("Resolve by keeping the version you want and deleting .%s files.", suffix))
 	}
 
 	// Show trash stats for backup-enabled projects

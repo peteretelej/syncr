@@ -171,7 +171,7 @@ func TestIntegration_ConflictDetection(t *testing.T) {
 	h.CreateFile(h.LocalDir, "subdir/file.conflict2", "conflict 2")
 
 	// Check conflict detection
-	count, err := syncpkg.CountConflicts(h.LocalDir)
+	count, err := syncpkg.CountConflicts(h.LocalDir, "")
 	if err != nil {
 		t.Fatalf("CountConflicts failed: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestIntegration_ConflictDetection(t *testing.T) {
 	}
 
 	// List conflicts
-	conflicts, err := syncpkg.ListConflicts(h.LocalDir)
+	conflicts, err := syncpkg.ListConflicts(h.LocalDir, "")
 	if err != nil {
 		t.Fatalf("ListConflicts failed: %v", err)
 	}

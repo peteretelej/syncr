@@ -168,7 +168,7 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 		prog.Detail("snapshot warning (sync folder): %v", snapE)
 		snapErr = true
 	}
-	preConflicts, _ := sync.CountConflicts(syncPath)
+	preConflicts, _ := sync.CountConflicts(syncPath, cfg.ResolvedConflictSuffix())
 
 	start := time.Now()
 
@@ -232,7 +232,7 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 	}
 
 	// Check for conflicts
-	conflictCount, _ := sync.CountConflicts(syncPath)
+	conflictCount, _ := sync.CountConflicts(syncPath, cfg.ResolvedConflictSuffix())
 
 	if conflictCount > 0 {
 		prog.Done(duration, conflictCount)
