@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/rclone/rclone/fs/filter"
 )
 
 func TestInit(t *testing.T) {
@@ -118,6 +120,35 @@ func TestBisyncOptions_Defaults(t *testing.T) {
 	}
 }
 
+func TestFilterExcludes(t *testing.T) {
+	ctx := context.Background()
+	var fi *filter.Filter
+	ctx, fi = filter.AddConfig(ctx)
+
+	// Add exclude patterns
+	if err := fi.Add(false, "*.db"); err != nil {
+		t.Fatalf("failed to add exclude pattern: %v", err)
+	}
+	if err := fi.Add(false, ".cache/"); err != nil {
+		t.Fatalf("failed to add exclude pattern: %v", err)
+	}
+
+	_ = ctx // ctx carries the filter; we test the filter directly
+
+	// Excluded files should not be included
+	if fi.IncludeRemote("test.db") {
+		t.Error("expected test.db to be excluded")
+	}
+
+	// Non-excluded files should be included
+	if !fi.IncludeRemote("test.md") {
+		t.Error("expected test.md to be included")
+	}
+	if !fi.IncludeRemote("test.txt") {
+		t.Error("expected test.txt to be included")
+	}
+}
+
 // TestRunBisync_Integration is an integration test that performs actual bisync.
 // Run with: go test -v -run TestRunBisync_Integration -tags=integration
 func TestRunBisync_Integration(t *testing.T) {
@@ -172,5 +203,68 @@ func TestRunBisync_Integration(t *testing.T) {
 	cloudFile := filepath.Join(cloudPath, "test.txt")
 	if _, err := os.Stat(cloudFile); os.IsNotExist(err) {
 		t.Error("File should have been synced to cloud")
+	}
+}
+
+// TestRunBisync_Integration_Excludes verifies that excluded files are not synced.
+func TestRunBisync_Integration_Excludes(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
+	ctx := context.Background()
+
+	// Create temp directories
+	tmpDir, err := os.MkdirTemp("", "syncr-bisync-excludes")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	localPath := filepath.Join(tmpDir, "local")
+	cloudPath := filepath.Join(tmpDir, "cloud")
+	syncrDataDir := filepath.Join(tmpDir, "_syncr")
+
+	if err := os.MkdirAll(localPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(cloudPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create test files in local: one to sync, one to exclude
+	if err := os.WriteFile(filepath.Join(localPath, "readme.txt"), []byte("hello"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(localPath, "data.db"), []byte("db content"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	opts := BisyncOptions{
+		Resync:       true,
+		ResyncMode:   ResyncPath1,
+		DryRun:       false,
+		SyncrDataDir: syncrDataDir,
+		Excludes:     []string{"*.db"},
+	}
+
+	// Run bisync with exclude
+	result, err := RunBisync(ctx, localPath, cloudPath, opts)
+	if err != nil {
+		t.Fatalf("RunBisync failed: %v", err)
+	}
+
+	if !result.Success {
+		t.Errorf("RunBisync should succeed, error: %s", result.Error)
+	}
+
+	// Verify the txt file WAS synced
+	if _, err := os.Stat(filepath.Join(cloudPath, "readme.txt")); os.IsNotExist(err) {
+		t.Error("readme.txt should have been synced to cloud")
+	}
+
+	// Verify the db file was NOT synced
+	if _, err := os.Stat(filepath.Join(cloudPath, "data.db")); !os.IsNotExist(err) {
+		t.Error("data.db should NOT have been synced to cloud (excluded)")
 	}
 }

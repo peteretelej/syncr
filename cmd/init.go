@@ -246,6 +246,7 @@ func initProject(cfg *config.Config, st *state.State, project *config.Project, v
 		DryRun:       false,
 		Verbose:      verbose,
 		SyncrDataDir: cfg.SyncrDataDir(),
+		Excludes:     project.Exclude,
 	}
 
 	ctx := context.Background()

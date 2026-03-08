@@ -57,13 +57,32 @@ func Status(configPath string) {
 		}
 	}
 
+	// Check if any project has excludes
+	hasExcludes := false
+	for _, p := range cfg.Projects {
+		if len(p.Exclude) > 0 {
+			hasExcludes = true
+			break
+		}
+	}
+
 	// Header
-	fmt.Printf("  %-*s  %-16s  %-18s  %s\n", maxNameLen, "Name", "Status", "Last Sync", "Conflicts")
-	fmt.Printf("  %s  %s  %s  %s\n",
-		repeatStr("-", maxNameLen),
-		repeatStr("-", 16),
-		repeatStr("-", 18),
-		repeatStr("-", 9))
+	if hasExcludes {
+		fmt.Printf("  %-*s  %-16s  %-18s  %-9s  %s\n", maxNameLen, "Name", "Status", "Last Sync", "Conflicts", "Excludes")
+		fmt.Printf("  %s  %s  %s  %s  %s\n",
+			repeatStr("-", maxNameLen),
+			repeatStr("-", 16),
+			repeatStr("-", 18),
+			repeatStr("-", 9),
+			repeatStr("-", 8))
+	} else {
+		fmt.Printf("  %-*s  %-16s  %-18s  %s\n", maxNameLen, "Name", "Status", "Last Sync", "Conflicts")
+		fmt.Printf("  %s  %s  %s  %s\n",
+			repeatStr("-", maxNameLen),
+			repeatStr("-", 16),
+			repeatStr("-", 18),
+			repeatStr("-", 9))
+	}
 
 	// Collect conflicts for later display
 	var allConflicts []conflictInfo
@@ -117,8 +136,17 @@ func Status(configPath string) {
 			conflictStr = color.YellowString("%d", conflictCount)
 		}
 
-		fmt.Printf("  %-*s  %s  %-18s  %s\n",
-			maxNameLen, project.Name, coloredStatus, lastSync, conflictStr)
+		if hasExcludes {
+			excludeStr := "-"
+			if len(project.Exclude) > 0 {
+				excludeStr = fmt.Sprintf("%d excludes", len(project.Exclude))
+			}
+			fmt.Printf("  %-*s  %s  %-18s  %-9s  %s\n",
+				maxNameLen, project.Name, coloredStatus, lastSync, conflictStr, excludeStr)
+		} else {
+			fmt.Printf("  %-*s  %s  %-18s  %s\n",
+				maxNameLen, project.Name, coloredStatus, lastSync, conflictStr)
+		}
 	}
 
 	// Show conflict details if any

@@ -756,3 +756,148 @@ func TestValidate_SyncPathVariations(t *testing.T) {
 		})
 	}
 }
+
+func TestValidate_ExcludePatterns(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	tests := []struct {
+		name    string
+		exclude []string
+		wantErr bool
+	}{
+		{
+			name:    "valid glob patterns",
+			exclude: []string{"*.db", ".cache/", "node_modules/", "specific-file.txt"},
+			wantErr: false,
+		},
+		{
+			name:    "deeply nested glob",
+			exclude: []string{"**/*.tmp"},
+			wantErr: false,
+		},
+		{
+			name:    "no excludes",
+			exclude: nil,
+			wantErr: false,
+		},
+		{
+			name:    "empty string in exclude",
+			exclude: []string{"*.db", ""},
+			wantErr: true,
+		},
+		{
+			name:    "star alone is valid in Validate",
+			exclude: []string{"*"},
+			wantErr: false,
+		},
+		{
+			name:    "double star alone is valid in Validate",
+			exclude: []string{"**"},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Config{
+				SyncRoot:            tmpDir,
+				SyncIntervalMinutes: 300,
+				Projects: []Project{
+					{Name: "Test", LocalPath: tmpDir, SyncPath: "test", Enabled: true, Exclude: tt.exclude},
+				},
+			}
+			err := cfg.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidateFull_ExcludePatterns(t *testing.T) {
+	tmpDir := t.TempDir()
+	localDir := filepath.Join(tmpDir, "local")
+	cloudDir := filepath.Join(tmpDir, "proj")
+	os.MkdirAll(localDir, 0755)
+	os.MkdirAll(cloudDir, 0755)
+
+	t.Run("empty string in exclude is an error", func(t *testing.T) {
+		cfg := Config{
+			SyncRoot:            tmpDir,
+			SyncIntervalMinutes: 300,
+			Projects: []Project{
+				{Name: "proj", LocalPath: localDir, SyncPath: "proj", Enabled: true, Exclude: []string{"*.db", ""}},
+			},
+		}
+		result := cfg.ValidateFull()
+		found := false
+		for _, e := range result.Errors {
+			if e == "project proj: empty string in exclude list" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected empty-string exclude error, got errors: %v", result.Errors)
+		}
+	})
+
+	t.Run("star alone is a warning", func(t *testing.T) {
+		cfg := Config{
+			SyncRoot:            tmpDir,
+			SyncIntervalMinutes: 300,
+			Projects: []Project{
+				{Name: "proj", LocalPath: localDir, SyncPath: "proj", Enabled: true, Exclude: []string{"*"}},
+			},
+		}
+		result := cfg.ValidateFull()
+		found := false
+		for _, w := range result.Warnings {
+			if w == `project proj: exclude pattern "*" would exclude all files` {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected star-alone warning, got warnings: %v", result.Warnings)
+		}
+		// Should not be an error
+		for _, e := range result.Errors {
+			if e == `project proj: exclude pattern "*" would exclude all files` {
+				t.Errorf("star-alone should be a warning, not an error")
+			}
+		}
+	})
+
+	t.Run("double star alone is a warning", func(t *testing.T) {
+		cfg := Config{
+			SyncRoot:            tmpDir,
+			SyncIntervalMinutes: 300,
+			Projects: []Project{
+				{Name: "proj", LocalPath: localDir, SyncPath: "proj", Enabled: true, Exclude: []string{"**"}},
+			},
+		}
+		result := cfg.ValidateFull()
+		found := false
+		for _, w := range result.Warnings {
+			if w == `project proj: exclude pattern "**" would exclude all files` {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected double-star warning, got warnings: %v", result.Warnings)
+		}
+	})
+
+	t.Run("valid patterns produce no exclude errors", func(t *testing.T) {
+		cfg := Config{
+			SyncRoot:            tmpDir,
+			SyncIntervalMinutes: 300,
+			Projects: []Project{
+				{Name: "proj", LocalPath: localDir, SyncPath: "proj", Enabled: true, Exclude: []string{"*.db", ".cache/", "node_modules/", "**/*.tmp"}},
+			},
+		}
+		result := cfg.ValidateFull()
+		if len(result.Errors) > 0 {
+			t.Errorf("expected no errors for valid exclude patterns, got: %v", result.Errors)
+		}
+	})
+}

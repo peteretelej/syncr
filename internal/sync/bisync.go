@@ -15,6 +15,7 @@ import (
 	"github.com/rclone/rclone/fs"
 	"github.com/rclone/rclone/fs/config"
 	"github.com/rclone/rclone/fs/config/configfile"
+	"github.com/rclone/rclone/fs/filter"
 )
 
 // ResyncMode determines which path takes priority during resync.
@@ -41,6 +42,8 @@ type BisyncOptions struct {
 	Verbose bool
 	// SyncrDataDir is the path to the _syncr folder for working files.
 	SyncrDataDir string
+	// Excludes is a list of glob patterns to exclude from sync.
+	Excludes []string
 }
 
 // BisyncResult contains the results of a bisync operation.
@@ -95,6 +98,18 @@ func RunBisync(ctx context.Context, localPath, cloudPath string, opts BisyncOpti
 	if err := os.MkdirAll(workdir, 0755); err != nil {
 		result.Error = fmt.Sprintf("failed to create workdir: %v", err)
 		return result, fmt.Errorf("create workdir: %w", err)
+	}
+
+	// Apply exclude filters before creating filesystem objects
+	if len(opts.Excludes) > 0 {
+		var fi *filter.Filter
+		ctx, fi = filter.AddConfig(ctx)
+		for _, pattern := range opts.Excludes {
+			if err := fi.Add(false, pattern); err != nil {
+				result.Error = fmt.Sprintf("invalid exclude pattern %q: %v", pattern, err)
+				return result, fmt.Errorf("invalid exclude pattern %q: %w", pattern, err)
+			}
+		}
 	}
 
 	// Create filesystem objects

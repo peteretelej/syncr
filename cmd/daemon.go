@@ -218,6 +218,7 @@ func runDaemonSync(cfg *config.Config, st *state.State, log *logger.Logger, warn
 			DryRun:       false,
 			Verbose:      false,
 			SyncrDataDir: cfg.SyncrDataDir(),
+			Excludes:     project.Exclude,
 		}
 
 		_, err := sync.RunBisync(ctx, project.LocalPath, syncPath, opts)

@@ -38,10 +38,11 @@ type Config struct {
 
 // Project represents a single sync project.
 type Project struct {
-	Name      string `json:"name"`
-	LocalPath string `json:"local_path"`
-	SyncPath  string `json:"sync_path"`
-	Enabled   bool   `json:"enabled"`
+	Name      string   `json:"name"`
+	LocalPath string   `json:"local_path"`
+	SyncPath  string   `json:"sync_path"`
+	Enabled   bool     `json:"enabled"`
+	Exclude   []string `json:"exclude,omitempty"`
 }
 
 // Load loads configuration from the specified path or default location.
@@ -146,6 +147,13 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("project %s: local_path must be an absolute path", p.Name)
 		}
 
+		// Validate exclude patterns
+		for _, pattern := range p.Exclude {
+			if pattern == "" {
+				return fmt.Errorf("project %s: empty string in exclude list", p.Name)
+			}
+		}
+
 		// Validate sync_path: check for duplicates and overlapping paths
 		normalized := filepath.Clean(p.SyncPath)
 		if normalized == "" || normalized == "." {
@@ -234,6 +242,15 @@ func (c *Config) ValidateFull() ValidationResult {
 			result.Errors = append(result.Errors, fmt.Sprintf("project %s: local_path is required", p.Name))
 		} else if !filepath.IsAbs(p.LocalPath) {
 			result.Errors = append(result.Errors, fmt.Sprintf("project %s: local_path must be an absolute path", p.Name))
+		}
+
+		// Validate exclude patterns
+		for _, pattern := range p.Exclude {
+			if pattern == "" {
+				result.Errors = append(result.Errors, fmt.Sprintf("project %s: empty string in exclude list", p.Name))
+			} else if pattern == "*" || pattern == "**" {
+				result.Warnings = append(result.Warnings, fmt.Sprintf("project %s: exclude pattern %q would exclude all files", p.Name, pattern))
+			}
 		}
 
 		// Check sync_path duplicates and overlaps

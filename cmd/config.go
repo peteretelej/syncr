@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/peteretelej/syncr/internal/config"
 )
@@ -32,6 +33,9 @@ func ShowConfig(configPath string) {
 		fmt.Printf("  %s (%s)\n", p.Name, status)
 		fmt.Printf("    local:  %s\n", p.LocalPath)
 		fmt.Printf("    sync folder:  %s\n", filepath.Join(cfg.SyncRoot, p.SyncPath))
+		if len(p.Exclude) > 0 {
+			fmt.Printf("    exclude: %s\n", strings.Join(p.Exclude, ", "))
+		}
 		fmt.Println()
 	}
 
