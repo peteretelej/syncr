@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/rclone/rclone/cmd/bisync"
 	"github.com/rclone/rclone/fs/filter"
 )
 
@@ -266,5 +267,94 @@ func TestRunBisync_Integration_Excludes(t *testing.T) {
 	// Verify the db file was NOT synced
 	if _, err := os.Stat(filepath.Join(cloudPath, "data.db")); !os.IsNotExist(err) {
 		t.Error("data.db should NOT have been synced to cloud (excluded)")
+	}
+}
+
+func TestBuildBisyncOpts_ConflictResolve(t *testing.T) {
+	opts := BisyncOptions{
+		ConflictResolve: "newer",
+	}
+	result := buildBisyncOpts(opts, "/tmp/workdir")
+
+	if result.ConflictResolve != bisync.PreferNewer {
+		t.Errorf("ConflictResolve = %v, want %v (PreferNewer)", result.ConflictResolve, bisync.PreferNewer)
+	}
+}
+
+func TestBuildBisyncOpts_ConflictResolveEmpty(t *testing.T) {
+	opts := BisyncOptions{}
+	result := buildBisyncOpts(opts, "/tmp/workdir")
+
+	if result.ConflictResolve != bisync.PreferNone {
+		t.Errorf("ConflictResolve = %v, want %v (PreferNone)", result.ConflictResolve, bisync.PreferNone)
+	}
+}
+
+func TestBuildBisyncOpts_ConflictSuffix(t *testing.T) {
+	opts := BisyncOptions{
+		ConflictSuffix: "{DateOnly}",
+	}
+	result := buildBisyncOpts(opts, "/tmp/workdir")
+
+	if result.ConflictSuffixFlag != "{DateOnly}" {
+		t.Errorf("ConflictSuffixFlag = %q, want %q", result.ConflictSuffixFlag, "{DateOnly}")
+	}
+}
+
+func TestBuildBisyncOpts_ConflictSuffixEmpty(t *testing.T) {
+	opts := BisyncOptions{}
+	result := buildBisyncOpts(opts, "/tmp/workdir")
+
+	if result.ConflictSuffixFlag != "" {
+		t.Errorf("ConflictSuffixFlag = %q, want %q", result.ConflictSuffixFlag, "")
+	}
+}
+
+func TestBuildBisyncOpts_ExistingBehavior(t *testing.T) {
+	opts := BisyncOptions{
+		Resync:     true,
+		ResyncMode: ResyncPath1,
+		DryRun:     true,
+		BackupDir1: "/backup/dir1",
+		BackupDir2: "/backup/dir2",
+	}
+	workdir := "/tmp/test-workdir"
+	result := buildBisyncOpts(opts, workdir)
+
+	if result.Workdir != workdir {
+		t.Errorf("Workdir = %q, want %q", result.Workdir, workdir)
+	}
+	if result.MaxDelete != 50 {
+		t.Errorf("MaxDelete = %d, want 50", result.MaxDelete)
+	}
+	if !result.Resilient {
+		t.Error("Resilient should be true")
+	}
+	if !result.Recover {
+		t.Error("Recover should be true")
+	}
+	if !result.DryRun {
+		t.Error("DryRun should be true")
+	}
+	if result.CheckSync != bisync.CheckSyncTrue {
+		t.Errorf("CheckSync = %v, want CheckSyncTrue", result.CheckSync)
+	}
+	if !result.Compare.Size || !result.Compare.Modtime {
+		t.Error("Compare should have Size and Modtime enabled")
+	}
+	if result.CompareFlag != "size,modtime" {
+		t.Errorf("CompareFlag = %q, want %q", result.CompareFlag, "size,modtime")
+	}
+	if !result.Resync {
+		t.Error("Resync should be true")
+	}
+	if result.ResyncMode != bisync.PreferPath1 {
+		t.Errorf("ResyncMode = %v, want PreferPath1", result.ResyncMode)
+	}
+	if result.BackupDir1 != "/backup/dir1" {
+		t.Errorf("BackupDir1 = %q, want %q", result.BackupDir1, "/backup/dir1")
+	}
+	if result.BackupDir2 != "/backup/dir2" {
+		t.Errorf("BackupDir2 = %q, want %q", result.BackupDir2, "/backup/dir2")
 	}
 }

@@ -172,12 +172,26 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 
 	start := time.Now()
 
+	// Show conflict settings during dry-run
+	if dryRun {
+		resolve := cfg.ResolvedConflictResolve(project.Name)
+		if resolve != "" && resolve != "none" {
+			fmt.Printf("Would resolve conflicts: %s\n", resolve)
+		}
+		suffix := cfg.ResolvedConflictSuffix()
+		if suffix != "" {
+			fmt.Printf("Conflict suffix: %s\n", suffix)
+		}
+	}
+
 	opts := sync.BisyncOptions{
-		Resync:       false,
-		DryRun:       dryRun,
-		Verbose:      verbose,
-		SyncrDataDir: cfg.SyncrDataDir(),
-		Excludes:     project.Exclude,
+		Resync:          false,
+		DryRun:          dryRun,
+		Verbose:         verbose,
+		SyncrDataDir:    cfg.SyncrDataDir(),
+		Excludes:        project.Exclude,
+		ConflictResolve: cfg.ResolvedConflictResolve(project.Name),
+		ConflictSuffix:  cfg.ResolvedConflictSuffix(),
 	}
 
 	if project.BackupDir {

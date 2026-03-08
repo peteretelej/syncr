@@ -48,6 +48,10 @@ type BisyncOptions struct {
 	BackupDir1 string
 	// BackupDir2 is the directory for backing up changed/deleted files from path2 (cloud).
 	BackupDir2 string
+	// ConflictResolve is the conflict resolution strategy (e.g. "newer", "older", "path1").
+	ConflictResolve string
+	// ConflictSuffix is the custom suffix for conflict files (e.g. "{DateOnly}").
+	ConflictSuffix string
 }
 
 // BisyncResult contains the results of a bisync operation.
@@ -130,6 +134,24 @@ func RunBisync(ctx context.Context, localPath, cloudPath string, opts BisyncOpti
 	}
 
 	// Configure bisync options
+	bisyncOpts := buildBisyncOpts(opts, workdir)
+
+	// Run bisync
+	err = bisync.Bisync(ctx, localFs, cloudFs, bisyncOpts)
+	result.Duration = time.Since(start)
+
+	if err != nil {
+		result.Success = false
+		result.Error = err.Error()
+		return result, err
+	}
+
+	result.Success = true
+	return result, nil
+}
+
+// buildBisyncOpts constructs bisync.Options from BisyncOptions and a working directory.
+func buildBisyncOpts(opts BisyncOptions, workdir string) *bisync.Options {
 	bisyncOpts := &bisync.Options{
 		Workdir:     workdir,
 		MaxDelete:   50, // Safety: abort if >50% would be deleted
@@ -157,18 +179,15 @@ func RunBisync(ctx context.Context, localPath, cloudPath string, opts BisyncOpti
 		}
 	}
 
-	// Run bisync
-	err = bisync.Bisync(ctx, localFs, cloudFs, bisyncOpts)
-	result.Duration = time.Since(start)
-
-	if err != nil {
-		result.Success = false
-		result.Error = err.Error()
-		return result, err
+	// Configure conflict resolution
+	if opts.ConflictResolve != "" {
+		bisyncOpts.ConflictResolve.Set(opts.ConflictResolve)
+	}
+	if opts.ConflictSuffix != "" {
+		bisyncOpts.ConflictSuffixFlag = opts.ConflictSuffix
 	}
 
-	result.Success = true
-	return result, nil
+	return bisyncOpts
 }
 
 // validatePath checks that a path exists and is a directory.
