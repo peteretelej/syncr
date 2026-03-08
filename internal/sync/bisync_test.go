@@ -274,7 +274,10 @@ func TestBuildBisyncOpts_ConflictResolve(t *testing.T) {
 	opts := BisyncOptions{
 		ConflictResolve: "newer",
 	}
-	result := buildBisyncOpts(opts, "/tmp/workdir")
+	result, err := buildBisyncOpts(opts, "/tmp/workdir")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if result.ConflictResolve != bisync.PreferNewer {
 		t.Errorf("ConflictResolve = %v, want %v (PreferNewer)", result.ConflictResolve, bisync.PreferNewer)
@@ -283,10 +286,23 @@ func TestBuildBisyncOpts_ConflictResolve(t *testing.T) {
 
 func TestBuildBisyncOpts_ConflictResolveEmpty(t *testing.T) {
 	opts := BisyncOptions{}
-	result := buildBisyncOpts(opts, "/tmp/workdir")
+	result, err := buildBisyncOpts(opts, "/tmp/workdir")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if result.ConflictResolve != bisync.PreferNone {
 		t.Errorf("ConflictResolve = %v, want %v (PreferNone)", result.ConflictResolve, bisync.PreferNone)
+	}
+}
+
+func TestBuildBisyncOpts_ConflictResolveInvalid(t *testing.T) {
+	opts := BisyncOptions{
+		ConflictResolve: "bogus",
+	}
+	_, err := buildBisyncOpts(opts, "/tmp/workdir")
+	if err == nil {
+		t.Fatal("expected error for invalid conflict_resolve, got nil")
 	}
 }
 
@@ -294,7 +310,10 @@ func TestBuildBisyncOpts_ConflictSuffix(t *testing.T) {
 	opts := BisyncOptions{
 		ConflictSuffix: "{DateOnly}",
 	}
-	result := buildBisyncOpts(opts, "/tmp/workdir")
+	result, err := buildBisyncOpts(opts, "/tmp/workdir")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if result.ConflictSuffixFlag != "{DateOnly}" {
 		t.Errorf("ConflictSuffixFlag = %q, want %q", result.ConflictSuffixFlag, "{DateOnly}")
@@ -303,7 +322,10 @@ func TestBuildBisyncOpts_ConflictSuffix(t *testing.T) {
 
 func TestBuildBisyncOpts_ConflictSuffixEmpty(t *testing.T) {
 	opts := BisyncOptions{}
-	result := buildBisyncOpts(opts, "/tmp/workdir")
+	result, err := buildBisyncOpts(opts, "/tmp/workdir")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if result.ConflictSuffixFlag != "" {
 		t.Errorf("ConflictSuffixFlag = %q, want %q", result.ConflictSuffixFlag, "")
@@ -319,7 +341,10 @@ func TestBuildBisyncOpts_ExistingBehavior(t *testing.T) {
 		BackupDir2: "/backup/dir2",
 	}
 	workdir := "/tmp/test-workdir"
-	result := buildBisyncOpts(opts, workdir)
+	result, err := buildBisyncOpts(opts, workdir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 
 	if result.Workdir != workdir {
 		t.Errorf("Workdir = %q, want %q", result.Workdir, workdir)

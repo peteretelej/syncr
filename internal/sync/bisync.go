@@ -134,7 +134,11 @@ func RunBisync(ctx context.Context, localPath, cloudPath string, opts BisyncOpti
 	}
 
 	// Configure bisync options
-	bisyncOpts := buildBisyncOpts(opts, workdir)
+	bisyncOpts, err := buildBisyncOpts(opts, workdir)
+	if err != nil {
+		result.Error = fmt.Sprintf("bisync options: %v", err)
+		return result, err
+	}
 
 	// Run bisync
 	err = bisync.Bisync(ctx, localFs, cloudFs, bisyncOpts)
@@ -151,7 +155,7 @@ func RunBisync(ctx context.Context, localPath, cloudPath string, opts BisyncOpti
 }
 
 // buildBisyncOpts constructs bisync.Options from BisyncOptions and a working directory.
-func buildBisyncOpts(opts BisyncOptions, workdir string) *bisync.Options {
+func buildBisyncOpts(opts BisyncOptions, workdir string) (*bisync.Options, error) {
 	bisyncOpts := &bisync.Options{
 		Workdir:     workdir,
 		MaxDelete:   50, // Safety: abort if >50% would be deleted
@@ -181,13 +185,15 @@ func buildBisyncOpts(opts BisyncOptions, workdir string) *bisync.Options {
 
 	// Configure conflict resolution
 	if opts.ConflictResolve != "" {
-		bisyncOpts.ConflictResolve.Set(opts.ConflictResolve)
+		if err := bisyncOpts.ConflictResolve.Set(opts.ConflictResolve); err != nil {
+			return nil, fmt.Errorf("invalid conflict_resolve %q: %w", opts.ConflictResolve, err)
+		}
 	}
 	if opts.ConflictSuffix != "" {
 		bisyncOpts.ConflictSuffixFlag = opts.ConflictSuffix
 	}
 
-	return bisyncOpts
+	return bisyncOpts, nil
 }
 
 // validatePath checks that a path exists and is a directory.
