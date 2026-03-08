@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // ValidationResult holds categorized validation results.
@@ -28,12 +29,14 @@ func (v ValidationResult) HasIssues() bool {
 
 // Config represents the syncr configuration.
 type Config struct {
-	SyncRoot            string    `json:"sync_root"`
-	SyncIntervalMinutes int       `json:"sync_interval_minutes"`
-	Projects            []Project `json:"projects"`
+	SyncRoot                string    `json:"sync_root"`
+	SyncIntervalMinutes     int       `json:"sync_interval_minutes"`
+	BackupRetentionDaysJSON *int      `json:"backup_retention_days,omitempty"`
+	Projects                []Project `json:"projects"`
 
-	path         string // file path (not serialized)
-	localDataDir string // resolved local data directory (not serialized)
+	path                string // file path (not serialized)
+	localDataDir        string // resolved local data directory (not serialized)
+	backupRetentionDays int    // resolved value (not serialized)
 }
 
 // Hooks defines shell commands to run after sync events.
@@ -52,6 +55,7 @@ type Project struct {
 	Hooks              *Hooks            `json:"hooks,omitempty"`
 	HookTimeoutSeconds int               `json:"hook_timeout_seconds,omitempty"`
 	Derived            map[string]string `json:"derived,omitempty"`
+	BackupDir          bool              `json:"backup_dir,omitempty"`
 }
 
 // Load loads configuration from the specified path or default location.
@@ -99,6 +103,13 @@ func Load(configPath string) (*Config, error) {
 		return nil, fmt.Errorf("resolving data directory: %w", err)
 	}
 	cfg.localDataDir = dataDir
+
+	// Resolve backup retention days: nil pointer means use default (30)
+	if cfg.BackupRetentionDaysJSON != nil {
+		cfg.backupRetentionDays = *cfg.BackupRetentionDaysJSON
+	} else {
+		cfg.backupRetentionDays = 30
+	}
 
 	return &cfg, nil
 }
@@ -172,6 +183,11 @@ func (c *Config) Validate() error {
 		normalized := filepath.Clean(p.SyncPath)
 		if normalized == "" || normalized == "." {
 			normalized = p.Name // Default to project name if empty
+		}
+
+		// Reject reserved _syncr path
+		if normalized == "_syncr" || strings.HasPrefix(normalized, "_syncr"+string(filepath.Separator)) {
+			return fmt.Errorf("project %s: sync_path %q conflicts with reserved _syncr directory", p.Name, p.SyncPath)
 		}
 
 		for _, existing := range syncPaths {
@@ -278,6 +294,11 @@ func (c *Config) ValidateFull() ValidationResult {
 			normalized = p.Name
 		}
 
+		// Reject reserved _syncr path
+		if normalized == "_syncr" || strings.HasPrefix(normalized, "_syncr"+string(filepath.Separator)) {
+			result.Errors = append(result.Errors, fmt.Sprintf("project %s: sync_path %q conflicts with reserved _syncr directory", p.Name, p.SyncPath))
+		}
+
 		for _, existing := range syncPaths {
 			if normalized == existing {
 				result.Errors = append(result.Errors, fmt.Sprintf("duplicate sync_path: %s", p.SyncPath))
@@ -289,6 +310,11 @@ func (c *Config) ValidateFull() ValidationResult {
 			}
 		}
 		syncPaths = append(syncPaths, normalized)
+	}
+
+	// Warn on negative backup retention
+	if c.backupRetentionDays < 0 {
+		result.Warnings = append(result.Warnings, fmt.Sprintf("backup_retention_days is negative (%d), trash cleanup disabled", c.backupRetentionDays))
 	}
 
 	// Filesystem warnings (only if sync_root is a valid absolute path)
@@ -371,11 +397,23 @@ func (c *Config) GetProject(name string) *Project {
 	return nil
 }
 
+// BackupRetentionDays returns the resolved backup retention period in days.
+// Defaults to 30 if not set in the config file.
+func (c *Config) BackupRetentionDays() int {
+	return c.backupRetentionDays
+}
+
+// TrashDir returns the trash directory path for a given project.
+func (c *Config) TrashDir(projectName string) string {
+	return filepath.Join(c.SyncRoot, "_syncr", "trash", projectName)
+}
+
 // DefaultConfig returns a default configuration template.
 func DefaultConfig() *Config {
 	return &Config{
 		SyncRoot:            "",
 		SyncIntervalMinutes: 5,
 		Projects:            []Project{},
+		backupRetentionDays: 30,
 	}
 }

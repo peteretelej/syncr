@@ -1133,6 +1133,268 @@ func TestDerived_OmitemptyJSON(t *testing.T) {
 	}
 }
 
+func TestLoad_WithBackupDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "syncr.json")
+	localPath := filepath.Join(tmpDir, "local")
+
+	configContent := `{
+		"sync_root": "` + jsonEscape(tmpDir) + `",
+		"sync_interval_minutes": 5,
+		"projects": [
+			{
+				"name": "proj",
+				"local_path": "` + jsonEscape(localPath) + `",
+				"sync_path": "proj",
+				"enabled": true,
+				"backup_dir": true
+			}
+		]
+	}`
+
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if !cfg.Projects[0].BackupDir {
+		t.Error("BackupDir should be true")
+	}
+}
+
+func TestLoad_WithoutBackupDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "syncr.json")
+	localPath := filepath.Join(tmpDir, "local")
+
+	configContent := `{
+		"sync_root": "` + jsonEscape(tmpDir) + `",
+		"sync_interval_minutes": 5,
+		"projects": [
+			{
+				"name": "proj",
+				"local_path": "` + jsonEscape(localPath) + `",
+				"sync_path": "proj",
+				"enabled": true
+			}
+		]
+	}`
+
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Projects[0].BackupDir {
+		t.Error("BackupDir should default to false when omitted")
+	}
+}
+
+func TestLoad_BackupRetentionDays_Default(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "syncr.json")
+
+	configContent := `{
+		"sync_root": "` + jsonEscape(tmpDir) + `",
+		"sync_interval_minutes": 5,
+		"projects": []
+	}`
+
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.BackupRetentionDays() != 30 {
+		t.Errorf("BackupRetentionDays() = %d, want 30 (default)", cfg.BackupRetentionDays())
+	}
+}
+
+func TestLoad_BackupRetentionDays_Zero(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "syncr.json")
+
+	configContent := `{
+		"sync_root": "` + jsonEscape(tmpDir) + `",
+		"sync_interval_minutes": 5,
+		"backup_retention_days": 0,
+		"projects": []
+	}`
+
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.BackupRetentionDays() != 0 {
+		t.Errorf("BackupRetentionDays() = %d, want 0", cfg.BackupRetentionDays())
+	}
+}
+
+func TestLoad_BackupRetentionDays_Custom(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "syncr.json")
+
+	configContent := `{
+		"sync_root": "` + jsonEscape(tmpDir) + `",
+		"sync_interval_minutes": 5,
+		"backup_retention_days": 90,
+		"projects": []
+	}`
+
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.BackupRetentionDays() != 90 {
+		t.Errorf("BackupRetentionDays() = %d, want 90", cfg.BackupRetentionDays())
+	}
+}
+
+func TestValidateFull_NegativeRetention(t *testing.T) {
+	tmpDir := t.TempDir()
+	localDir := filepath.Join(tmpDir, "local")
+	cloudDir := filepath.Join(tmpDir, "proj")
+	os.MkdirAll(localDir, 0755)
+	os.MkdirAll(cloudDir, 0755)
+
+	cfg := Config{
+		SyncRoot:            tmpDir,
+		SyncIntervalMinutes: 300,
+		backupRetentionDays: -5,
+		Projects: []Project{
+			{Name: "proj", LocalPath: localDir, SyncPath: "proj", Enabled: true},
+		},
+	}
+
+	result := cfg.ValidateFull()
+	found := false
+	for _, w := range result.Warnings {
+		if w == "backup_retention_days is negative (-5), trash cleanup disabled" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected negative retention warning, got warnings: %v", result.Warnings)
+	}
+}
+
+func TestTrashDir(t *testing.T) {
+	cfg := &Config{SyncRoot: "/data/cloud"}
+
+	got := cfg.TrashDir("myproject")
+	want := filepath.Join("/data/cloud", "_syncr", "trash", "myproject")
+	if got != want {
+		t.Errorf("TrashDir() = %q, want %q", got, want)
+	}
+}
+
+func TestValidate_SyncrReservedSyncPath(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	tests := []struct {
+		name     string
+		syncPath string
+		wantErr  bool
+	}{
+		{"exact _syncr", "_syncr", true},
+		{"nested _syncr/foo", "_syncr/foo", true},
+		{"prefix but not reserved", "_syncrdata", false},
+		{"normal path", "myproject", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Config{
+				SyncRoot:            tmpDir,
+				SyncIntervalMinutes: 300,
+				Projects: []Project{
+					{Name: "proj", LocalPath: tmpDir, SyncPath: tt.syncPath, Enabled: true},
+				},
+			}
+			err := cfg.Validate()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr && err != nil {
+				if !strings.Contains(err.Error(), "reserved _syncr directory") {
+					t.Errorf("expected reserved _syncr error, got: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func TestSave_DoesNotInjectRetention(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "syncr.json")
+	localPath := filepath.Join(tmpDir, "local")
+
+	// Config without backup_retention_days
+	configContent := `{
+		"sync_root": "` + jsonEscape(tmpDir) + `",
+		"sync_interval_minutes": 5,
+		"projects": [
+			{
+				"name": "proj",
+				"local_path": "` + jsonEscape(localPath) + `",
+				"sync_path": "proj",
+				"enabled": true
+			}
+		]
+	}`
+
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	// Save should not inject backup_retention_days
+	if err := cfg.Save(); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Read back and check raw JSON
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile() error = %v", err)
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("Unmarshal() error = %v", err)
+	}
+
+	if _, exists := raw["backup_retention_days"]; exists {
+		t.Error("Save() should not inject backup_retention_days when it was not in the original config")
+	}
+}
+
 func TestValidateFull_ExcludePatterns(t *testing.T) {
 	tmpDir := t.TempDir()
 	localDir := filepath.Join(tmpDir, "local")
