@@ -36,6 +36,20 @@ func ShowConfig(configPath string) {
 		if len(p.Exclude) > 0 {
 			fmt.Printf("    exclude: %s\n", strings.Join(p.Exclude, ", "))
 		}
+		if p.Hooks != nil {
+			if p.Hooks.PostSync != "" || p.Hooks.OnConflict != "" {
+				fmt.Println("    hooks:")
+				if p.Hooks.PostSync != "" {
+					fmt.Printf("      post_sync: %s\n", p.Hooks.PostSync)
+				}
+				if p.Hooks.OnConflict != "" {
+					fmt.Printf("      on_conflict: %s\n", p.Hooks.OnConflict)
+				}
+			}
+			if p.HookTimeoutSeconds != 0 && p.HookTimeoutSeconds != 30 {
+				fmt.Printf("    hook_timeout: %ds\n", p.HookTimeoutSeconds)
+			}
+		}
 		fmt.Println()
 	}
 

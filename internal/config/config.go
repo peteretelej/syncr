@@ -36,13 +36,21 @@ type Config struct {
 	localDataDir string // resolved local data directory (not serialized)
 }
 
+// Hooks defines shell commands to run after sync events.
+type Hooks struct {
+	PostSync   string `json:"post_sync,omitempty"`
+	OnConflict string `json:"on_conflict,omitempty"`
+}
+
 // Project represents a single sync project.
 type Project struct {
-	Name      string   `json:"name"`
-	LocalPath string   `json:"local_path"`
-	SyncPath  string   `json:"sync_path"`
-	Enabled   bool     `json:"enabled"`
-	Exclude   []string `json:"exclude,omitempty"`
+	Name               string   `json:"name"`
+	LocalPath          string   `json:"local_path"`
+	SyncPath           string   `json:"sync_path"`
+	Enabled            bool     `json:"enabled"`
+	Exclude            []string `json:"exclude,omitempty"`
+	Hooks              *Hooks   `json:"hooks,omitempty"`
+	HookTimeoutSeconds int      `json:"hook_timeout_seconds,omitempty"`
 }
 
 // Load loads configuration from the specified path or default location.
@@ -154,6 +162,11 @@ func (c *Config) Validate() error {
 			}
 		}
 
+		// Validate hook_timeout_seconds
+		if p.HookTimeoutSeconds < 0 {
+			// Negative treated as default; warn via ValidateFull only
+		}
+
 		// Validate sync_path: check for duplicates and overlapping paths
 		normalized := filepath.Clean(p.SyncPath)
 		if normalized == "" || normalized == "." {
@@ -251,6 +264,11 @@ func (c *Config) ValidateFull() ValidationResult {
 			} else if pattern == "*" || pattern == "**" {
 				result.Warnings = append(result.Warnings, fmt.Sprintf("project %s: exclude pattern %q would exclude all files", p.Name, pattern))
 			}
+		}
+
+		// Validate hook_timeout_seconds
+		if p.HookTimeoutSeconds < 0 {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("project %s: negative hook_timeout_seconds (%d), using default (30s)", p.Name, p.HookTimeoutSeconds))
 		}
 
 		// Check sync_path duplicates and overlaps

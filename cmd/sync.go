@@ -144,6 +144,32 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 		}
 	}
 
+	// Show configured hooks during dry-run
+	if dryRun && project.Hooks != nil {
+		if project.Hooks.PostSync != "" {
+			fmt.Printf("Would run post_sync hook: %s\n", project.Hooks.PostSync)
+		}
+		if project.Hooks.OnConflict != "" {
+			fmt.Printf("Would run on_conflict hook: %s\n", project.Hooks.OnConflict)
+		}
+	}
+
+	// Take pre-sync snapshots for change detection
+	var preLocalSnap, preSyncSnap sync.DirSnapshot
+	var snapErr bool
+	var snapE error
+	preLocalSnap, snapE = sync.TakeSnapshot(project.LocalPath)
+	if snapE != nil {
+		prog.Detail("snapshot warning (local): %v", snapE)
+		snapErr = true
+	}
+	preSyncSnap, snapE = sync.TakeSnapshot(syncPath)
+	if snapE != nil {
+		prog.Detail("snapshot warning (sync folder): %v", snapE)
+		snapErr = true
+	}
+	preConflicts, _ := sync.CountConflicts(syncPath)
+
 	start := time.Now()
 
 	opts := sync.BisyncOptions{
@@ -189,6 +215,63 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 		}
 	}
 
+	// Fire hooks after successful sync (not in dry-run)
+	if !dryRun && !snapErr && project.Hooks != nil {
+		hookTimeout := 30 * time.Second
+		if project.HookTimeoutSeconds > 0 {
+			hookTimeout = time.Duration(project.HookTimeoutSeconds) * time.Second
+		}
+
+		// Detect changes by comparing snapshots
+		postLocalSnap, errL := sync.TakeSnapshot(project.LocalPath)
+		postSyncSnap, errS := sync.TakeSnapshot(syncPath)
+		if errL != nil || errS != nil {
+			prog.Detail("snapshot warning (post-sync): skipping hooks")
+		} else {
+			filesChanged := preLocalSnap.Changed(postLocalSnap) || preSyncSnap.Changed(postSyncSnap)
+			newConflicts := conflictCount - preConflicts
+			if newConflicts < 0 {
+				newConflicts = 0
+			}
+
+			hookEnv := sync.HookEnv{
+				ProjectName:  project.Name,
+				LocalPath:    project.LocalPath,
+				SyncPath:     syncPath,
+				FilesChanged: boolInt(filesChanged),
+				Conflicts:    newConflicts,
+			}
+
+			// post_sync hook
+			if project.Hooks.PostSync != "" && filesChanged {
+				out, hookErr := sync.RunHook(ctx, project.Hooks.PostSync, project.LocalPath, hookEnv, hookTimeout)
+				if hookErr != nil {
+					prog.Hint("post_sync hook error: %v", hookErr)
+				} else if out != "" {
+					prog.Detail("post_sync: %s", out)
+				}
+			}
+
+			// on_conflict hook
+			if project.Hooks.OnConflict != "" && newConflicts > 0 {
+				out, hookErr := sync.RunHook(ctx, project.Hooks.OnConflict, project.LocalPath, hookEnv, hookTimeout)
+				if hookErr != nil {
+					prog.Hint("on_conflict hook error: %v", hookErr)
+				} else if out != "" {
+					prog.Detail("on_conflict: %s", out)
+				}
+			}
+		}
+	}
+
 	_ = result // result contains additional info if needed
 	return "success"
+}
+
+// boolInt returns 1 if b is true, 0 otherwise.
+func boolInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }

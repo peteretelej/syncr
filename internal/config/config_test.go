@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -811,6 +812,180 @@ func TestValidate_ExcludePatterns(t *testing.T) {
 				t.Errorf("Validate() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestLoad_WithHooks(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "syncr.json")
+	localPath := filepath.Join(tmpDir, "local")
+
+	configContent := `{
+		"sync_root": "` + jsonEscape(tmpDir) + `",
+		"sync_interval_minutes": 5,
+		"projects": [
+			{
+				"name": "hooked",
+				"local_path": "` + jsonEscape(localPath) + `",
+				"sync_path": "hooked",
+				"enabled": true,
+				"hooks": {
+					"post_sync": "echo done",
+					"on_conflict": "notify-send conflict"
+				},
+				"hook_timeout_seconds": 60
+			}
+		]
+	}`
+
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	p := cfg.Projects[0]
+	if p.Hooks == nil {
+		t.Fatal("Hooks should not be nil")
+	}
+	if p.Hooks.PostSync != "echo done" {
+		t.Errorf("PostSync = %q, want %q", p.Hooks.PostSync, "echo done")
+	}
+	if p.Hooks.OnConflict != "notify-send conflict" {
+		t.Errorf("OnConflict = %q, want %q", p.Hooks.OnConflict, "notify-send conflict")
+	}
+	if p.HookTimeoutSeconds != 60 {
+		t.Errorf("HookTimeoutSeconds = %d, want 60", p.HookTimeoutSeconds)
+	}
+}
+
+func TestLoad_WithoutHooks(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "syncr.json")
+	localPath := filepath.Join(tmpDir, "local")
+
+	configContent := `{
+		"sync_root": "` + jsonEscape(tmpDir) + `",
+		"sync_interval_minutes": 5,
+		"projects": [
+			{
+				"name": "nohooks",
+				"local_path": "` + jsonEscape(localPath) + `",
+				"sync_path": "nohooks",
+				"enabled": true
+			}
+		]
+	}`
+
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	p := cfg.Projects[0]
+	if p.Hooks != nil {
+		t.Errorf("Hooks should be nil when not specified, got %+v", p.Hooks)
+	}
+	if p.HookTimeoutSeconds != 0 {
+		t.Errorf("HookTimeoutSeconds = %d, want 0", p.HookTimeoutSeconds)
+	}
+}
+
+func TestLoad_HookTimeoutOverride(t *testing.T) {
+	tmpDir := t.TempDir()
+	configPath := filepath.Join(tmpDir, "syncr.json")
+	localPath := filepath.Join(tmpDir, "local")
+
+	configContent := `{
+		"sync_root": "` + jsonEscape(tmpDir) + `",
+		"sync_interval_minutes": 5,
+		"projects": [
+			{
+				"name": "timeout",
+				"local_path": "` + jsonEscape(localPath) + `",
+				"sync_path": "timeout",
+				"enabled": true,
+				"hooks": {"post_sync": "echo ok"},
+				"hook_timeout_seconds": 120
+			}
+		]
+	}`
+
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		t.Fatalf("failed to write test config: %v", err)
+	}
+
+	cfg, err := Load(configPath)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if cfg.Projects[0].HookTimeoutSeconds != 120 {
+		t.Errorf("HookTimeoutSeconds = %d, want 120", cfg.Projects[0].HookTimeoutSeconds)
+	}
+}
+
+func TestValidateFull_NegativeHookTimeout(t *testing.T) {
+	tmpDir := t.TempDir()
+	localDir := filepath.Join(tmpDir, "local")
+	cloudDir := filepath.Join(tmpDir, "proj")
+	os.MkdirAll(localDir, 0755)
+	os.MkdirAll(cloudDir, 0755)
+
+	cfg := Config{
+		SyncRoot:            tmpDir,
+		SyncIntervalMinutes: 300,
+		Projects: []Project{
+			{
+				Name:               "proj",
+				LocalPath:          localDir,
+				SyncPath:           "proj",
+				Enabled:            true,
+				Hooks:              &Hooks{PostSync: "echo ok"},
+				HookTimeoutSeconds: -5,
+			},
+		},
+	}
+
+	result := cfg.ValidateFull()
+	found := false
+	for _, w := range result.Warnings {
+		if w == "project proj: negative hook_timeout_seconds (-5), using default (30s)" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected negative hook_timeout_seconds warning, got warnings: %v", result.Warnings)
+	}
+}
+
+func TestHooks_OmitemptyJSON(t *testing.T) {
+	// Verify that *Hooks pointer with omitempty correctly omits from JSON when nil
+	p := Project{
+		Name:      "test",
+		LocalPath: "/tmp/test",
+		SyncPath:  "test",
+		Enabled:   true,
+	}
+
+	data, err := json.Marshal(p)
+	if err != nil {
+		t.Fatalf("Marshal error: %v", err)
+	}
+
+	jsonStr := string(data)
+	if strings.Contains(jsonStr, "hooks") {
+		t.Errorf("JSON should not contain 'hooks' when Hooks is nil, got: %s", jsonStr)
+	}
+	if strings.Contains(jsonStr, "hook_timeout") {
+		t.Errorf("JSON should not contain 'hook_timeout' when zero, got: %s", jsonStr)
 	}
 }
 

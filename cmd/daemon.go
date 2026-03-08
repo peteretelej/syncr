@@ -211,6 +211,21 @@ func runDaemonSync(cfg *config.Config, st *state.State, log *logger.Logger, warn
 			continue
 		}
 
+		// Take pre-sync snapshots for change detection
+		var preLocalSnap, preSyncSnap sync.DirSnapshot
+		var snapErr bool
+		preLocalSnap, snapE := sync.TakeSnapshot(project.LocalPath)
+		if snapE != nil {
+			log.Debug("%s: snapshot warning (local): %v", project.Name, snapE)
+			snapErr = true
+		}
+		preSyncSnap, snapE = sync.TakeSnapshot(syncPath)
+		if snapE != nil {
+			log.Debug("%s: snapshot warning (sync folder): %v", project.Name, snapE)
+			snapErr = true
+		}
+		preConflicts, _ := sync.CountConflicts(syncPath)
+
 		start := time.Now()
 
 		opts := sync.BisyncOptions{
@@ -246,6 +261,54 @@ func runDaemonSync(cfg *config.Config, st *state.State, log *logger.Logger, warn
 		} else {
 			log.Info("%s: synced (%v)", project.Name, duration.Round(time.Millisecond))
 			st.RecordSuccess(project.Name)
+		}
+
+		// Fire hooks after successful sync
+		if !snapErr && project.Hooks != nil {
+			hookTimeout := 30 * time.Second
+			if project.HookTimeoutSeconds > 0 {
+				hookTimeout = time.Duration(project.HookTimeoutSeconds) * time.Second
+			}
+
+			postLocalSnap, errL := sync.TakeSnapshot(project.LocalPath)
+			postSyncSnap, errS := sync.TakeSnapshot(syncPath)
+			if errL != nil || errS != nil {
+				log.Debug("%s: snapshot warning (post-sync): skipping hooks", project.Name)
+			} else {
+				filesChanged := preLocalSnap.Changed(postLocalSnap) || preSyncSnap.Changed(postSyncSnap)
+				newConflicts := conflictCount - preConflicts
+				if newConflicts < 0 {
+					newConflicts = 0
+				}
+
+				hookEnv := sync.HookEnv{
+					ProjectName:  project.Name,
+					LocalPath:    project.LocalPath,
+					SyncPath:     syncPath,
+					FilesChanged: boolInt(filesChanged),
+					Conflicts:    newConflicts,
+				}
+
+				// post_sync hook
+				if project.Hooks.PostSync != "" && filesChanged {
+					out, hookErr := sync.RunHook(ctx, project.Hooks.PostSync, project.LocalPath, hookEnv, hookTimeout)
+					if hookErr != nil {
+						log.Warn("%s: post_sync hook error: %v", project.Name, hookErr)
+					} else if out != "" {
+						log.Debug("%s: post_sync: %s", project.Name, out)
+					}
+				}
+
+				// on_conflict hook
+				if project.Hooks.OnConflict != "" && newConflicts > 0 {
+					out, hookErr := sync.RunHook(ctx, project.Hooks.OnConflict, project.LocalPath, hookEnv, hookTimeout)
+					if hookErr != nil {
+						log.Warn("%s: on_conflict hook error: %v", project.Name, hookErr)
+					} else if out != "" {
+						log.Debug("%s: on_conflict: %s", project.Name, out)
+					}
+				}
+			}
 		}
 	}
 
