@@ -44,6 +44,10 @@ type BisyncOptions struct {
 	SyncrDataDir string
 	// Excludes is a list of glob patterns to exclude from sync.
 	Excludes []string
+	// BackupDir1 is the directory for backing up changed/deleted files from path1 (local).
+	BackupDir1 string
+	// BackupDir2 is the directory for backing up changed/deleted files from path2 (cloud).
+	BackupDir2 string
 }
 
 // BisyncResult contains the results of a bisync operation.
@@ -135,6 +139,8 @@ func RunBisync(ctx context.Context, localPath, cloudPath string, opts BisyncOpti
 		CheckSync:   bisync.CheckSyncTrue,
 		Compare:     bisync.CompareOpt{Size: true, Modtime: true},
 		CompareFlag: "size,modtime",
+		BackupDir1:  opts.BackupDir1,
+		BackupDir2:  opts.BackupDir2,
 	}
 
 	// Configure resync if needed

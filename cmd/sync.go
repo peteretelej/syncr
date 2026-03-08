@@ -180,6 +180,23 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 		Excludes:     project.Exclude,
 	}
 
+	if project.BackupDir {
+		timestamp := sync.TrashTimestamp()
+		trashPath := filepath.Join(cfg.TrashDir(project.Name), timestamp)
+		opts.BackupDir1 = trashPath
+		opts.BackupDir2 = trashPath
+		if dryRun {
+			fmt.Printf("Would set backup-dir: %s\n", trashPath)
+		} else if cfg.BackupRetentionDays() > 0 {
+			deleted, err := sync.CleanTrash(cfg.TrashDir(project.Name), cfg.BackupRetentionDays())
+			if err != nil {
+				prog.Detail("trash cleanup error: %v", err)
+			} else if deleted > 0 {
+				prog.Detail("cleaned %d old trash directories", deleted)
+			}
+		}
+	}
+
 	result, err := sync.RunBisync(ctx, project.LocalPath, syncPath, opts)
 	duration := time.Since(start)
 

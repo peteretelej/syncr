@@ -235,6 +235,21 @@ func runDaemonSync(ctx context.Context, cfg *config.Config, st *state.State, log
 			Excludes:     project.Exclude,
 		}
 
+		if project.BackupDir {
+			timestamp := sync.TrashTimestamp()
+			trashPath := filepath.Join(cfg.TrashDir(project.Name), timestamp)
+			opts.BackupDir1 = trashPath
+			opts.BackupDir2 = trashPath
+			if cfg.BackupRetentionDays() > 0 {
+				deleted, err := sync.CleanTrash(cfg.TrashDir(project.Name), cfg.BackupRetentionDays())
+				if err != nil {
+					log.Debug("%s: trash cleanup error: %v", project.Name, err)
+				} else if deleted > 0 {
+					log.Debug("%s: cleaned %d old trash directories", project.Name, deleted)
+				}
+			}
+		}
+
 		_, err := sync.RunBisync(ctx, project.LocalPath, syncPath, opts)
 		duration := time.Since(start)
 
