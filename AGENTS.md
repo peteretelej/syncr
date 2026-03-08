@@ -33,6 +33,7 @@ internal/sync/bisync.go --> rclone bisync --> sync_root/{project}/
 | `internal/state/state.go` | Sync state tracking |
 | `internal/sync/bisync.go` | rclone bisync wrapper |
 | `internal/sync/conflicts.go` | Conflict file detection |
+| `internal/sync/trash.go` | Trash cleanup and stats |
 | `internal/logger/logger.go` | Console and file logging |
 
 ## Configuration Format
@@ -43,12 +44,14 @@ internal/sync/bisync.go --> rclone bisync --> sync_root/{project}/
 {
   "sync_root": "/Users/you/OneDrive/syncr",
   "sync_interval_minutes": 5,
+  "backup_retention_days": 30,
   "projects": [
     {
       "name": "docs",
       "local_path": "/Users/you/Projects/app/docs",
       "sync_path": "docs",
       "enabled": true,
+      "backup_dir": true,
       "exclude": ["*.db", ".cache/"],
       "hooks": {
         "post_sync": "./rebuild.sh",
@@ -144,7 +147,8 @@ Sync folder structure:
 ```
 {sync_root}/
 ├── {project1}/          # Synced files
-└── {project2}/          # Synced files
+├── {project2}/          # Synced files
+└── _syncr/trash/        # Backup copies (when backup_dir enabled)
 ```
 
 ## Dependencies

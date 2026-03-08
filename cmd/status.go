@@ -163,6 +163,34 @@ func Status(configPath string) {
 		fmt.Println(color.YellowString("Resolve by keeping the version you want and deleting .conflict1 files."))
 	}
 
+	// Show trash stats for backup-enabled projects
+	hasBackup := false
+	for _, p := range cfg.Projects {
+		if p.BackupDir {
+			hasBackup = true
+			break
+		}
+	}
+	if hasBackup {
+		fmt.Println()
+		fmt.Println("Backup trash:")
+		for _, project := range cfg.Projects {
+			if !project.BackupDir {
+				continue
+			}
+			trashPath := cfg.TrashDir(project.Name)
+			fileCount, totalBytes, err := sync.TrashStats(trashPath)
+			if err != nil {
+				fmt.Printf("  Trash: error reading (%s)\n", trashPath)
+			} else if fileCount > 0 {
+				fmt.Printf("  %s:\n", project.Name)
+				fmt.Printf("    %d files, %s (%s)\n", fileCount, formatSize(totalBytes), trashPath)
+			} else {
+				fmt.Printf("  Trash: empty (%s)\n", trashPath)
+			}
+		}
+	}
+
 	// Show derived file info if any project has derived entries
 	hasDerived := false
 	for _, p := range cfg.Projects {
@@ -264,4 +292,23 @@ func repeatStr(s string, n int) string {
 		result += s
 	}
 	return result
+}
+
+// formatSize formats a byte count as a human-readable string.
+func formatSize(bytes int64) string {
+	const (
+		KB = 1024
+		MB = 1024 * KB
+		GB = 1024 * MB
+	)
+	switch {
+	case bytes < KB:
+		return fmt.Sprintf("%d B", bytes)
+	case bytes < MB:
+		return fmt.Sprintf("%.1f KB", float64(bytes)/float64(KB))
+	case bytes < GB:
+		return fmt.Sprintf("%.1f MB", float64(bytes)/float64(MB))
+	default:
+		return fmt.Sprintf("%.1f GB", float64(bytes)/float64(GB))
+	}
 }

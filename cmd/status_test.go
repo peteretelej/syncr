@@ -76,6 +76,27 @@ func TestFormatRelativeTime_Days(t *testing.T) {
 	}
 }
 
+func TestFormatSize(t *testing.T) {
+	tests := []struct {
+		bytes int64
+		want  string
+	}{
+		{500, "500 B"},
+		{1024, "1.0 KB"},
+		{1572864, "1.5 MB"},
+		{2254857830, "2.1 GB"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.want, func(t *testing.T) {
+			got := formatSize(tt.bytes)
+			if got != tt.want {
+				t.Errorf("formatSize(%d) = %q, want %q", tt.bytes, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestCheckDaemonStatus_NoPIDFile(t *testing.T) {
 	dir := t.TempDir()
 	result := checkDaemonStatus(dir)
