@@ -45,6 +45,8 @@ internal/sync/bisync.go --> rclone bisync --> sync_root/{project}/
   "sync_root": "/Users/you/OneDrive/syncr",
   "sync_interval_minutes": 5,
   "backup_retention_days": 30,
+  "conflict_resolve": "newer",
+  "conflict_suffix": "{DateOnly}",
   "projects": [
     {
       "name": "docs",
@@ -52,6 +54,7 @@ internal/sync/bisync.go --> rclone bisync --> sync_root/{project}/
       "sync_path": "docs",
       "enabled": true,
       "backup_dir": true,
+      "conflict_resolve": "path1",
       "exclude": ["*.db", ".cache/"],
       "hooks": {
         "post_sync": "./rebuild.sh",
@@ -65,6 +68,13 @@ internal/sync/bisync.go --> rclone bisync --> sync_root/{project}/
   ]
 }
 ```
+
+### Conflict Resolution Fields
+
+| Field | Level | Description |
+|-------|-------|-------------|
+| `conflict_resolve` | global + project | Resolution strategy: `none`, `newer`, `older`, `larger`, `smaller`, `path1`, `path2`. Project overrides global. |
+| `conflict_suffix` | global | Custom suffix for conflict files. Supports rclone time globs: `{DateOnly}`, `{TimeOnly}`, `{DateTimeISO}`. Default: `conflict`. |
 
 ## Sync Behavior
 

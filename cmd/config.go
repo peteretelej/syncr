@@ -22,6 +22,12 @@ func ShowConfig(configPath string) {
 	fmt.Println()
 	fmt.Printf("sync_root: %s\n", cfg.SyncRoot)
 	fmt.Printf("sync_interval: %dm\n", cfg.SyncIntervalMinutes)
+	if cfg.ConflictResolve != "" {
+		fmt.Printf("conflict_resolve: %s\n", cfg.ConflictResolve)
+	}
+	if cfg.ConflictSuffix != "" {
+		fmt.Printf("conflict_suffix: %s\n", cfg.ConflictSuffix)
+	}
 	fmt.Println()
 	fmt.Printf("Projects (%d):\n", len(cfg.Projects))
 
@@ -49,6 +55,9 @@ func ShowConfig(configPath string) {
 			if p.HookTimeoutSeconds != 0 && p.HookTimeoutSeconds != 30 {
 				fmt.Printf("    hook_timeout: %ds\n", p.HookTimeoutSeconds)
 			}
+		}
+		if p.ConflictResolve != "" {
+			fmt.Printf("    conflict_resolve: %s\n", p.ConflictResolve)
 		}
 		if len(p.Derived) > 0 {
 			fmt.Println("    derived:")

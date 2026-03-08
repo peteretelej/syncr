@@ -2,6 +2,7 @@
   "sync_root": "C:\\Users\\You\\OneDrive\\syncr",
   "sync_interval_minutes": 5,
   "backup_retention_days": 30,
+  "conflict_resolve": "newer",
   "projects": [
     {
       "name": "webapp-docs",
@@ -14,7 +15,8 @@
       "local_path": "C:\\Users\\You\\Notes",
       "sync_path": "notes",
       "enabled": true,
-      "backup_dir": true
+      "backup_dir": true,
+      "conflict_resolve": "path1"
     }
   ]
 }
