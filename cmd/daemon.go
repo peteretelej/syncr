@@ -72,9 +72,9 @@ func Daemon(configPath string, verbose bool) {
 	log.Info("Sync interval: %v", interval)
 	log.Info("Projects: %d enabled", enabledCount)
 
-	// Set up signal handling
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	// Set up signal handling with cancellable context
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
 	// Create ticker
 	ticker := time.NewTicker(interval)
@@ -85,7 +85,7 @@ func Daemon(configPath string, verbose bool) {
 
 	// Run initial sync
 	log.Info("Running initial sync (%d projects)...", enabledCount)
-	runDaemonSync(cfg, st, log, warnedSkips)
+	runDaemonSync(ctx, cfg, st, log, warnedSkips)
 
 	// Main loop
 	for {
@@ -111,10 +111,10 @@ func Daemon(configPath string, verbose bool) {
 				}
 			}
 			log.Info("Running scheduled sync (%d projects)...", scheduledEnabled)
-			runDaemonSync(cfg, st, log, warnedSkips)
+			runDaemonSync(ctx, cfg, st, log, warnedSkips)
 
-		case sig := <-sigChan:
-			log.Info("Received %v, shutting down...", sig)
+		case <-ctx.Done():
+			log.Info("Received shutdown signal, shutting down...")
 			return
 		}
 	}
@@ -169,8 +169,7 @@ func maybeReloadConfig(configPath string, current *config.Config, lastModTime ti
 const MaxConsecutiveErrors = 5
 
 // runDaemonSync syncs all enabled, initialized projects.
-func runDaemonSync(cfg *config.Config, st *state.State, log *logger.Logger, warnedSkips map[string]bool) {
-	ctx := context.Background()
+func runDaemonSync(ctx context.Context, cfg *config.Config, st *state.State, log *logger.Logger, warnedSkips map[string]bool) {
 
 	for _, project := range cfg.Projects {
 		if !project.Enabled {

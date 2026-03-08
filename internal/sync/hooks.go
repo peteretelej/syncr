@@ -48,7 +48,7 @@ func RunHook(ctx context.Context, command string, workDir string, env HookEnv, t
 		"SYNCR_PROJECT="+env.ProjectName,
 		"SYNCR_LOCAL_PATH="+env.LocalPath,
 		"SYNCR_SYNC_PATH="+env.SyncPath,
-		"SYNCR_FILES_CHANGED="+boolStr(env.FilesChanged),
+		"SYNCR_HAS_CHANGES="+boolStr(env.FilesChanged),
 		"SYNCR_CONFLICTS="+strconv.Itoa(env.Conflicts),
 	)
 

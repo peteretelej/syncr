@@ -46,7 +46,7 @@ func TestRunHook_EnvVars(t *testing.T) {
 		Conflicts:    3,
 	}
 
-	output, err := RunHook(context.Background(), "echo $SYNCR_PROJECT $SYNCR_FILES_CHANGED $SYNCR_CONFLICTS", t.TempDir(), env, 30*time.Second)
+	output, err := RunHook(context.Background(), "echo $SYNCR_PROJECT $SYNCR_HAS_CHANGES $SYNCR_CONFLICTS", t.TempDir(), env, 30*time.Second)
 	if err != nil {
 		t.Fatalf("RunHook: unexpected error: %v", err)
 	}
@@ -109,11 +109,11 @@ func TestRunHook_FilesChangedZero(t *testing.T) {
 	}
 
 	env := HookEnv{FilesChanged: 0}
-	output, err := RunHook(context.Background(), "echo $SYNCR_FILES_CHANGED", t.TempDir(), env, 30*time.Second)
+	output, err := RunHook(context.Background(), "echo $SYNCR_HAS_CHANGES", t.TempDir(), env, 30*time.Second)
 	if err != nil {
 		t.Fatalf("RunHook: unexpected error: %v", err)
 	}
 	if strings.TrimSpace(output) != "0" {
-		t.Errorf("SYNCR_FILES_CHANGED = %q, want %q", strings.TrimSpace(output), "0")
+		t.Errorf("SYNCR_HAS_CHANGES = %q, want %q", strings.TrimSpace(output), "0")
 	}
 }
