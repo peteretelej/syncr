@@ -235,6 +235,21 @@ func TestResolvedExcludes(t *testing.T) {
 	}
 }
 
+func TestResolvedExcludesFor_DuplicateProjectNames(t *testing.T) {
+	cfg := Config{
+		Exclude: []string{".env"},
+		Projects: []Project{
+			{Name: "docs", Exclude: []string{"first.tmp"}},
+			{Name: "docs", Exclude: []string{"second.tmp"}},
+		},
+	}
+
+	got := cfg.ResolvedExcludesFor(&cfg.Projects[1])
+	if want := ".env,second.tmp"; strings.Join(got, ",") != want {
+		t.Errorf("ResolvedExcludesFor() = %v, want %s", got, want)
+	}
+}
+
 func TestSyncrDataDir_PanicsWithoutLocalDataDir(t *testing.T) {
 	cfg := &Config{SyncRoot: t.TempDir()}
 

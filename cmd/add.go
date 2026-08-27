@@ -24,6 +24,10 @@ func Add(args []string, configPath string, verbose, dryRun bool) {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 		os.Exit(1)
 	}
+	if err := cfg.Validate(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: invalid config: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Get local path from argument or prompt
 	var localPath string

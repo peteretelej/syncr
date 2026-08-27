@@ -123,7 +123,7 @@ func Status(configPath string) {
 		conflictCount := 0
 		var conflicts []string
 		if ps.Initialized && pathExists(syncPath) {
-			conflicts, _ = sync.ListConflicts(syncPath, cfg.ResolvedConflictSuffix())
+			conflicts, _ = sync.ListConflicts(syncPath, cfg.ResolvedConflictSuffix(), cfg.ResolvedExcludesFor(&project)...)
 			conflictCount = len(conflicts)
 			if conflictCount > 0 {
 				allConflicts = append(allConflicts, conflictInfo{
@@ -140,7 +140,7 @@ func Status(configPath string) {
 
 		if hasExcludes {
 			excludeStr := "-"
-			if excludes := cfg.ResolvedExcludes(project.Name); len(excludes) > 0 {
+			if excludes := cfg.ResolvedExcludesFor(&project); len(excludes) > 0 {
 				excludeStr = fmt.Sprintf("%d excludes", len(excludes))
 			}
 			fmt.Printf("  %-*s  %s  %-18s  %-9s  %s\n",
