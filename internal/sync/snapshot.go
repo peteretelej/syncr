@@ -32,13 +32,13 @@ func TakeSnapshot(path string, excludes ...string) (DirSnapshot, error) {
 			}
 			return err
 		}
-		if !includedPath(fi, path, p, d) {
-			if d.IsDir() {
+		if d.IsDir() {
+			if !includedDir(fi, path, p) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if d.IsDir() {
+		if !includedFile(fi, path, p) {
 			return nil
 		}
 

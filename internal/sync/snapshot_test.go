@@ -99,6 +99,36 @@ func TestTakeSnapshot_Excludes(t *testing.T) {
 	}
 }
 
+func TestTakeSnapshot_SingleLevelExcludeKeepsSubdirs(t *testing.T) {
+	dir := t.TempDir()
+	files := map[string]string{
+		"build/direct.txt":   "excluded",
+		"build/sub/kept.txt": "kept",
+	}
+	for name, content := range files {
+		path := filepath.Join(dir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	// "build/*" excludes files directly in build/ but not nested ones,
+	// matching rclone's filter semantics.
+	snap, err := TakeSnapshot(dir, "build/*")
+	if err != nil {
+		t.Fatalf("TakeSnapshot: unexpected error: %v", err)
+	}
+	if snap.FileCount != 1 {
+		t.Errorf("FileCount = %d, want 1", snap.FileCount)
+	}
+	if snap.TotalSize != int64(len("kept")) {
+		t.Errorf("TotalSize = %d, want %d", snap.TotalSize, len("kept"))
+	}
+}
+
 func TestDirSnapshot_Changed_Identical(t *testing.T) {
 	now := time.Now()
 	a := DirSnapshot{FileCount: 5, TotalSize: 100, LatestModTime: now}
