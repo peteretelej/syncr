@@ -66,15 +66,13 @@ func ListConflicts(path string, suffix string, excludes ...string) ([]string, er
 			return err
 		}
 
-		if !includedPath(fi, path, p, d) {
-			if d.IsDir() {
+		if d.IsDir() {
+			if !includedDir(fi, path, p) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-
-		// Skip directories
-		if d.IsDir() {
+		if !includedFile(fi, path, p) {
 			return nil
 		}
 
