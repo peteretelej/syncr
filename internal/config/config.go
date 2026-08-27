@@ -283,7 +283,9 @@ func (c *Config) ValidateFull() ValidationResult {
 	for _, pattern := range c.Exclude {
 		if pattern == "" {
 			result.Errors = append(result.Errors, "empty string in global exclude list")
-		} else if pattern == "*" || pattern == "**" {
+		} else if pattern == "*" {
+			result.Warnings = append(result.Warnings, `global exclude pattern "*" would exclude all files in each synced folder root`)
+		} else if pattern == "**" {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("global exclude pattern %q would exclude all files", pattern))
 		}
 	}
@@ -326,7 +328,9 @@ func (c *Config) ValidateFull() ValidationResult {
 		for _, pattern := range p.Exclude {
 			if pattern == "" {
 				result.Errors = append(result.Errors, fmt.Sprintf("project %s: empty string in exclude list", p.Name))
-			} else if pattern == "*" || pattern == "**" {
+			} else if pattern == "*" {
+				result.Warnings = append(result.Warnings, fmt.Sprintf(`project %s: exclude pattern "*" would exclude all files in the synced folder root`, p.Name))
+			} else if pattern == "**" {
 				result.Warnings = append(result.Warnings, fmt.Sprintf("project %s: exclude pattern %q would exclude all files", p.Name, pattern))
 			}
 		}

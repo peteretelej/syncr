@@ -1823,7 +1823,7 @@ func TestValidateFull_ExcludePatterns(t *testing.T) {
 		result := cfg.ValidateFull()
 		found := false
 		for _, w := range result.Warnings {
-			if w == `project proj: exclude pattern "*" would exclude all files` {
+			if w == `project proj: exclude pattern "*" would exclude all files in the synced folder root` {
 				found = true
 			}
 		}
@@ -1832,7 +1832,7 @@ func TestValidateFull_ExcludePatterns(t *testing.T) {
 		}
 		// Should not be an error
 		for _, e := range result.Errors {
-			if e == `project proj: exclude pattern "*" would exclude all files` {
+			if e == `project proj: exclude pattern "*" would exclude all files in the synced folder root` {
 				t.Errorf("star-alone should be a warning, not an error")
 			}
 		}
@@ -1902,7 +1902,7 @@ func TestValidateFull_ExcludePatterns(t *testing.T) {
 		result := cfg.ValidateFull()
 		found := false
 		for _, warning := range result.Warnings {
-			if warning == `global exclude pattern "*" would exclude all files` {
+			if warning == `global exclude pattern "*" would exclude all files in each synced folder root` {
 				found = true
 			}
 		}
