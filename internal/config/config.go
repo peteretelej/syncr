@@ -45,6 +45,7 @@ type Config struct {
 	BackupRetentionDaysJSON *int      `json:"backup_retention_days,omitempty"`
 	ConflictResolve         string    `json:"conflict_resolve,omitempty"`
 	ConflictSuffix          string    `json:"conflict_suffix,omitempty"`
+	Exclude                 []string  `json:"exclude,omitempty"`
 	Projects                []Project `json:"projects"`
 
 	path                string // file path (not serialized)
@@ -164,6 +165,12 @@ func (c *Config) Validate() error {
 		return errors.New("sync_interval_minutes must be at least 1")
 	}
 
+	for _, pattern := range c.Exclude {
+		if pattern == "" {
+			return errors.New("empty string in global exclude list")
+		}
+	}
+
 	// Validate global conflict_resolve
 	if c.ConflictResolve != "" && !validConflictResolve[c.ConflictResolve] {
 		return fmt.Errorf("invalid conflict_resolve value: %q", c.ConflictResolve)
@@ -271,6 +278,14 @@ func (c *Config) ValidateFull() ValidationResult {
 
 	if c.SyncIntervalMinutes < 1 {
 		result.Errors = append(result.Errors, "sync_interval_minutes must be at least 1")
+	}
+
+	for _, pattern := range c.Exclude {
+		if pattern == "" {
+			result.Errors = append(result.Errors, "empty string in global exclude list")
+		} else if pattern == "*" || pattern == "**" {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("global exclude pattern %q would exclude all files", pattern))
+		}
 	}
 
 	// Validate global conflict_resolve
@@ -443,6 +458,16 @@ func (c *Config) GetProject(name string) *Project {
 // Defaults to 30 if not set in the config file.
 func (c *Config) BackupRetentionDays() int {
 	return c.backupRetentionDays
+}
+
+// ResolvedExcludes returns the combined global and project exclude patterns.
+func (c *Config) ResolvedExcludes(projectName string) []string {
+	excludes := make([]string, 0, len(c.Exclude))
+	excludes = append(excludes, c.Exclude...)
+	if p := c.GetProject(projectName); p != nil {
+		excludes = append(excludes, p.Exclude...)
+	}
+	return excludes
 }
 
 // ResolvedConflictResolve returns the effective conflict resolution strategy

@@ -28,6 +28,9 @@ func ShowConfig(configPath string) {
 	if cfg.ConflictSuffix != "" {
 		fmt.Printf("conflict_suffix: %s\n", cfg.ConflictSuffix)
 	}
+	if len(cfg.Exclude) > 0 {
+		fmt.Printf("exclude: %s\n", strings.Join(cfg.Exclude, ", "))
+	}
 	fmt.Println()
 	fmt.Printf("Projects (%d):\n", len(cfg.Projects))
 

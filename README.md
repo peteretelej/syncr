@@ -45,6 +45,7 @@ You can also create `syncr.json` manually:
 {
   "sync_root": "/Users/You/OneDrive/syncr",
   "sync_interval_minutes": 5,
+  "exclude": [".env", "*.tmp"],
   "projects": [
     {
       "name": "docs",
@@ -124,12 +125,14 @@ export SYNCR_CONFIG=~/syncr.json
 {
   "sync_root": "/Users/You/OneDrive/syncr",
   "sync_interval_minutes": 5,
+  "exclude": [".env", "*.tmp"],
   "projects": [
     {
       "name": "docs",
       "local_path": "/Users/You/Projects/myapp/docs",
       "sync_path": "docs",
-      "enabled": true
+      "enabled": true,
+      "exclude": ["*.db"]
     }
   ]
 }
@@ -139,10 +142,14 @@ export SYNCR_CONFIG=~/syncr.json
 |-------|-------------|
 | `sync_root` | Base path for your sync folder |
 | `sync_interval_minutes` | How often daemon syncs, in minutes (minimum 1, default 5) |
+| `exclude` | Optional patterns excluded from every project |
 | `projects[].name` | Project identifier |
 | `projects[].local_path` | Absolute path to local folder |
 | `projects[].sync_path` | Subfolder name under sync_root |
 | `projects[].enabled` | Set false to skip this project |
+| `projects[].exclude` | Optional project-specific patterns, added to global exclusions |
+
+Exclude patterns use rclone filter syntax. Global and project-level patterns are combined for initialization, one-shot sync, and daemon sync.
 
 ## How It Works
 

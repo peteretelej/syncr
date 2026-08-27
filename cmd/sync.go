@@ -137,9 +137,10 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 	prog.Start(project.Name)
 
 	// Show excluded patterns during dry-run
-	if dryRun && len(project.Exclude) > 0 {
+	excludes := cfg.ResolvedExcludes(project.Name)
+	if dryRun && len(excludes) > 0 {
 		fmt.Println("Excluded patterns:")
-		for _, pattern := range project.Exclude {
+		for _, pattern := range excludes {
 			fmt.Printf("  %s\n", pattern)
 		}
 	}
@@ -189,7 +190,7 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 		DryRun:          dryRun,
 		Verbose:         verbose,
 		SyncrDataDir:    cfg.SyncrDataDir(),
-		Excludes:        project.Exclude,
+		Excludes:        excludes,
 		ConflictResolve: cfg.ResolvedConflictResolve(project.Name),
 		ConflictSuffix:  cfg.ResolvedConflictSuffix(),
 	}
