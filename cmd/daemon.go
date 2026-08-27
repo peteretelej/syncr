@@ -232,7 +232,7 @@ func runDaemonSync(ctx context.Context, cfg *config.Config, st *state.State, log
 			DryRun:          false,
 			Verbose:         false,
 			SyncrDataDir:    cfg.SyncrDataDir(),
-			Excludes:        project.Exclude,
+			Excludes:        cfg.ResolvedExcludes(project.Name),
 			ConflictResolve: cfg.ResolvedConflictResolve(project.Name),
 			ConflictSuffix:  cfg.ResolvedConflictSuffix(),
 		}

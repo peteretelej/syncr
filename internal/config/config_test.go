@@ -25,12 +25,14 @@ func TestLoad(t *testing.T) {
 	configContent := `{
 		"sync_root": "` + jsonEscape(tmpDir) + `",
 		"sync_interval_minutes": 5,
+		"exclude": [".env"],
 		"projects": [
 			{
 				"name": "TestProject",
 				"local_path": "` + jsonEscape(localPath) + `",
 				"sync_path": "TestProject",
-				"enabled": true
+				"enabled": true,
+				"exclude": ["*.tmp"]
 			}
 		]
 	}`
@@ -58,6 +60,12 @@ func TestLoad(t *testing.T) {
 
 	if cfg.Projects[0].Name != "TestProject" {
 		t.Errorf("Projects[0].Name = %q, want %q", cfg.Projects[0].Name, "TestProject")
+	}
+	if len(cfg.Exclude) != 1 || cfg.Exclude[0] != ".env" {
+		t.Errorf("Exclude = %v, want [.env]", cfg.Exclude)
+	}
+	if len(cfg.Projects[0].Exclude) != 1 || cfg.Projects[0].Exclude[0] != "*.tmp" {
+		t.Errorf("Projects[0].Exclude = %v, want [*.tmp]", cfg.Projects[0].Exclude)
 	}
 }
 
@@ -201,6 +209,29 @@ func TestSyncrDataDir(t *testing.T) {
 	got := cfg.SyncrDataDir()
 	if got != localDir {
 		t.Errorf("SyncrDataDir() = %q, want %q", got, localDir)
+	}
+}
+
+func TestResolvedExcludes(t *testing.T) {
+	cfg := Config{
+		Exclude: []string{".env", "*.tmp"},
+		Projects: []Project{
+			{Name: "docs", Exclude: []string{"*.db"}},
+		},
+	}
+
+	got := cfg.ResolvedExcludes("docs")
+	if want := ".env,*.tmp,*.db"; strings.Join(got, ",") != want {
+		t.Errorf("ResolvedExcludes() = %v, want %s", got, want)
+	}
+
+	got[0] = "changed"
+	if cfg.Exclude[0] != ".env" {
+		t.Error("ResolvedExcludes() modified the configured global excludes")
+	}
+
+	if got := cfg.ResolvedExcludes("missing"); strings.Join(got, ",") != ".env,*.tmp" {
+		t.Errorf("ResolvedExcludes() for missing project = %v, want global excludes", got)
 	}
 }
 
@@ -1823,6 +1854,45 @@ func TestValidateFull_ExcludePatterns(t *testing.T) {
 		result := cfg.ValidateFull()
 		if len(result.Errors) > 0 {
 			t.Errorf("expected no errors for valid exclude patterns, got: %v", result.Errors)
+		}
+	})
+
+	t.Run("empty global pattern is an error", func(t *testing.T) {
+		cfg := Config{
+			SyncRoot:            tmpDir,
+			SyncIntervalMinutes: 300,
+			Exclude:             []string{"*.tmp", ""},
+		}
+		if err := cfg.Validate(); err == nil {
+			t.Fatal("expected Validate error for empty global exclude pattern")
+		}
+		result := cfg.ValidateFull()
+		found := false
+		for _, err := range result.Errors {
+			if err == "empty string in global exclude list" {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected global exclude error, got errors: %v", result.Errors)
+		}
+	})
+
+	t.Run("global star alone is a warning", func(t *testing.T) {
+		cfg := Config{
+			SyncRoot:            tmpDir,
+			SyncIntervalMinutes: 300,
+			Exclude:             []string{"*"},
+		}
+		result := cfg.ValidateFull()
+		found := false
+		for _, warning := range result.Warnings {
+			if warning == `global exclude pattern "*" would exclude all files` {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("expected global star warning, got warnings: %v", result.Warnings)
 		}
 	})
 }

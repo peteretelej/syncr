@@ -58,11 +58,13 @@ func Status(configPath string) {
 	}
 
 	// Check if any project has excludes
-	hasExcludes := false
-	for _, p := range cfg.Projects {
-		if len(p.Exclude) > 0 {
-			hasExcludes = true
-			break
+	hasExcludes := len(cfg.Exclude) > 0
+	if !hasExcludes {
+		for _, p := range cfg.Projects {
+			if len(p.Exclude) > 0 {
+				hasExcludes = true
+				break
+			}
 		}
 	}
 
@@ -138,8 +140,8 @@ func Status(configPath string) {
 
 		if hasExcludes {
 			excludeStr := "-"
-			if len(project.Exclude) > 0 {
-				excludeStr = fmt.Sprintf("%d excludes", len(project.Exclude))
+			if excludes := cfg.ResolvedExcludes(project.Name); len(excludes) > 0 {
+				excludeStr = fmt.Sprintf("%d excludes", len(excludes))
 			}
 			fmt.Printf("  %-*s  %s  %-18s  %-9s  %s\n",
 				maxNameLen, project.Name, coloredStatus, lastSync, conflictStr, excludeStr)

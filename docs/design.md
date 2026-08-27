@@ -117,6 +117,7 @@ Configuration loading and validation.
 type Config struct {
     SyncRoot            string    `json:"sync_root"`
     SyncIntervalMinutes int       `json:"sync_interval_minutes"`
+    Exclude             []string  `json:"exclude,omitempty"`
     Projects            []Project `json:"projects"`
 }
 
@@ -125,6 +126,7 @@ type Project struct {
     LocalPath    string `json:"local_path"`
     SyncPath string `json:"sync_path"`
     Enabled      bool   `json:"enabled"`
+    Exclude      []string `json:"exclude,omitempty"`
 }
 ```
 
@@ -228,12 +230,14 @@ Format:
 {
   "sync_root": "/Users/you/OneDrive/syncr",
   "sync_interval_minutes": 5,
+  "exclude": [".env", "*.tmp"],
   "projects": [
     {
       "name": "docs",
       "local_path": "/Users/you/Projects/app/docs",
       "sync_path": "docs",
-      "enabled": true
+      "enabled": true,
+      "exclude": ["*.db"]
     }
   ]
 }
@@ -243,11 +247,13 @@ Format:
 |-------|------|---------|-------------|
 | `sync_root` | string | required | Base path for sync folder |
 | `sync_interval_minutes` | int | 5 | Daemon sync interval in minutes (min 1) |
+| `exclude` | array | [] | Patterns excluded from every project |
 | `projects` | array | required | List of projects to sync |
 | `projects[].name` | string | required | Project identifier |
 | `projects[].local_path` | string | required | Absolute local path |
 | `projects[].sync_path` | string | required | Subfolder in sync_root |
 | `projects[].enabled` | bool | true | Include in sync |
+| `projects[].exclude` | array | [] | Additional project-specific exclude patterns |
 
 ## Initialization
 
