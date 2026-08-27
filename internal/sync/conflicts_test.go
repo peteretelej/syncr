@@ -89,6 +89,32 @@ func TestListConflicts(t *testing.T) {
 	}
 }
 
+func TestListConflicts_Excludes(t *testing.T) {
+	tmpDir := t.TempDir()
+	testFiles := []string{
+		"keep.conflict1",
+		"ignored.tmp.conflict1",
+		".cache/nested.conflict1",
+	}
+	for _, name := range testFiles {
+		path := filepath.Join(tmpDir, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("test"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	conflicts, err := ListConflicts(tmpDir, "", "*.tmp.conflict*", ".cache/")
+	if err != nil {
+		t.Fatalf("ListConflicts failed: %v", err)
+	}
+	if len(conflicts) != 1 || conflicts[0] != "keep.conflict1" {
+		t.Errorf("conflicts = %v, want [keep.conflict1]", conflicts)
+	}
+}
+
 func TestHasConflicts(t *testing.T) {
 	// Create temp directory
 	tmpDir, err := os.MkdirTemp("", "syncr-conflicts-test")

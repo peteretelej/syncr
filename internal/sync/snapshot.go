@@ -14,18 +14,29 @@ type DirSnapshot struct {
 	LatestModTime time.Time
 }
 
-// TakeSnapshot walks a directory and returns a snapshot of its contents.
+// TakeSnapshot walks a directory and returns a snapshot of its included contents.
 // Only regular files are counted; directories are skipped. If the directory
-// does not exist or cannot be read, an error is returned.
-func TakeSnapshot(path string) (DirSnapshot, error) {
+// does not exist, cannot be read, or an exclude pattern is invalid, an error is returned.
+func TakeSnapshot(path string, excludes ...string) (DirSnapshot, error) {
 	var snap DirSnapshot
 
-	err := filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
+	fi, err := newExcludeFilter(excludes)
+	if err != nil {
+		return snap, err
+	}
+
+	err = filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if d != nil && d.IsDir() {
 				return filepath.SkipDir
 			}
 			return err
+		}
+		if !includedPath(fi, path, p, d) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if d.IsDir() {
 			return nil

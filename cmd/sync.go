@@ -137,7 +137,7 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 	prog.Start(project.Name)
 
 	// Show excluded patterns during dry-run
-	excludes := cfg.ResolvedExcludes(project.Name)
+	excludes := cfg.ResolvedExcludesFor(project)
 	if dryRun && len(excludes) > 0 {
 		fmt.Println("Excluded patterns:")
 		for _, pattern := range excludes {
@@ -159,17 +159,17 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 	var preLocalSnap, preSyncSnap sync.DirSnapshot
 	var snapErr bool
 	var snapE error
-	preLocalSnap, snapE = sync.TakeSnapshot(project.LocalPath)
+	preLocalSnap, snapE = sync.TakeSnapshot(project.LocalPath, excludes...)
 	if snapE != nil {
 		prog.Detail("snapshot warning (local): %v", snapE)
 		snapErr = true
 	}
-	preSyncSnap, snapE = sync.TakeSnapshot(syncPath)
+	preSyncSnap, snapE = sync.TakeSnapshot(syncPath, excludes...)
 	if snapE != nil {
 		prog.Detail("snapshot warning (sync folder): %v", snapE)
 		snapErr = true
 	}
-	preConflicts, _ := sync.CountConflicts(syncPath, cfg.ResolvedConflictSuffix())
+	preConflicts, _ := sync.CountConflicts(syncPath, cfg.ResolvedConflictSuffix(), excludes...)
 
 	start := time.Now()
 
@@ -233,7 +233,7 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 	}
 
 	// Check for conflicts
-	conflictCount, _ := sync.CountConflicts(syncPath, cfg.ResolvedConflictSuffix())
+	conflictCount, _ := sync.CountConflicts(syncPath, cfg.ResolvedConflictSuffix(), excludes...)
 
 	if conflictCount > 0 {
 		prog.Done(duration, conflictCount)
@@ -255,8 +255,8 @@ func syncProject(ctx context.Context, cfg *config.Config, st *state.State, proje
 		}
 
 		// Detect changes by comparing snapshots
-		postLocalSnap, errL := sync.TakeSnapshot(project.LocalPath)
-		postSyncSnap, errS := sync.TakeSnapshot(syncPath)
+		postLocalSnap, errL := sync.TakeSnapshot(project.LocalPath, excludes...)
+		postSyncSnap, errS := sync.TakeSnapshot(syncPath, excludes...)
 		if errL != nil || errS != nil {
 			prog.Detail("snapshot warning (post-sync): skipping hooks")
 		} else {

@@ -462,10 +462,20 @@ func (c *Config) BackupRetentionDays() int {
 
 // ResolvedExcludes returns the combined global and project exclude patterns.
 func (c *Config) ResolvedExcludes(projectName string) []string {
-	excludes := make([]string, 0, len(c.Exclude))
+	return c.ResolvedExcludesFor(c.GetProject(projectName))
+}
+
+// ResolvedExcludesFor returns the combined global and project exclude patterns
+// for the provided project.
+func (c *Config) ResolvedExcludesFor(project *Project) []string {
+	projectExcludeCount := 0
+	if project != nil {
+		projectExcludeCount = len(project.Exclude)
+	}
+	excludes := make([]string, 0, len(c.Exclude)+projectExcludeCount)
 	excludes = append(excludes, c.Exclude...)
-	if p := c.GetProject(projectName); p != nil {
-		excludes = append(excludes, p.Exclude...)
+	if project != nil {
+		excludes = append(excludes, project.Exclude...)
 	}
 	return excludes
 }

@@ -210,20 +210,22 @@ func runDaemonSync(ctx context.Context, cfg *config.Config, st *state.State, log
 			continue
 		}
 
+		excludes := cfg.ResolvedExcludesFor(&project)
+
 		// Take pre-sync snapshots for change detection
 		var preLocalSnap, preSyncSnap sync.DirSnapshot
 		var snapErr bool
-		preLocalSnap, snapE := sync.TakeSnapshot(project.LocalPath)
+		preLocalSnap, snapE := sync.TakeSnapshot(project.LocalPath, excludes...)
 		if snapE != nil {
 			log.Debug("%s: snapshot warning (local): %v", project.Name, snapE)
 			snapErr = true
 		}
-		preSyncSnap, snapE = sync.TakeSnapshot(syncPath)
+		preSyncSnap, snapE = sync.TakeSnapshot(syncPath, excludes...)
 		if snapE != nil {
 			log.Debug("%s: snapshot warning (sync folder): %v", project.Name, snapE)
 			snapErr = true
 		}
-		preConflicts, _ := sync.CountConflicts(syncPath, cfg.ResolvedConflictSuffix())
+		preConflicts, _ := sync.CountConflicts(syncPath, cfg.ResolvedConflictSuffix(), excludes...)
 
 		start := time.Now()
 
@@ -232,7 +234,7 @@ func runDaemonSync(ctx context.Context, cfg *config.Config, st *state.State, log
 			DryRun:          false,
 			Verbose:         false,
 			SyncrDataDir:    cfg.SyncrDataDir(),
-			Excludes:        cfg.ResolvedExcludes(project.Name),
+			Excludes:        excludes,
 			ConflictResolve: cfg.ResolvedConflictResolve(project.Name),
 			ConflictSuffix:  cfg.ResolvedConflictSuffix(),
 		}
@@ -269,7 +271,7 @@ func runDaemonSync(ctx context.Context, cfg *config.Config, st *state.State, log
 		}
 
 		// Check for conflicts
-		conflictCount, _ := sync.CountConflicts(syncPath, cfg.ResolvedConflictSuffix())
+		conflictCount, _ := sync.CountConflicts(syncPath, cfg.ResolvedConflictSuffix(), excludes...)
 
 		if conflictCount > 0 {
 			log.Warn("%s: synced with %d conflict(s) (%v)", project.Name, conflictCount, duration.Round(time.Millisecond))
@@ -286,8 +288,8 @@ func runDaemonSync(ctx context.Context, cfg *config.Config, st *state.State, log
 				hookTimeout = time.Duration(project.HookTimeoutSeconds) * time.Second
 			}
 
-			postLocalSnap, errL := sync.TakeSnapshot(project.LocalPath)
-			postSyncSnap, errS := sync.TakeSnapshot(syncPath)
+			postLocalSnap, errL := sync.TakeSnapshot(project.LocalPath, excludes...)
+			postSyncSnap, errS := sync.TakeSnapshot(syncPath, excludes...)
 			if errL != nil || errS != nil {
 				log.Debug("%s: snapshot warning (post-sync): skipping hooks", project.Name)
 			} else {

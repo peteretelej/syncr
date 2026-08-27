@@ -47,6 +47,10 @@ func Init(args []string, configPath string, verbose, dryRun bool) {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
 		os.Exit(1)
 	}
+	if err := cfg.Validate(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: invalid config: %v\n", err)
+		os.Exit(1)
+	}
 
 	// Find project
 	project := cfg.GetProject(projectName)
@@ -87,6 +91,10 @@ func batchInit(configPath string, verbose, dryRun bool) {
 	cfg, err := config.Load(configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		os.Exit(1)
+	}
+	if err := cfg.Validate(); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: invalid config: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -193,9 +201,19 @@ func initProject(cfg *config.Config, st *state.State, project *config.Project, v
 		}
 	}
 
-	// Count files in each location
-	localCount := countFiles(project.LocalPath)
-	syncCount := countFiles(syncPath)
+	// Count included files in each location
+	excludes := cfg.ResolvedExcludesFor(project)
+	localCount, err := countFiles(project.LocalPath, excludes)
+	if err != nil {
+		return fmt.Errorf("counting local files: %v", err)
+	}
+	syncCount := 0
+	if pathExists(syncPath) {
+		syncCount, err = countFiles(syncPath, excludes)
+		if err != nil {
+			return fmt.Errorf("counting sync files: %v", err)
+		}
+	}
 
 	fmt.Printf("  Local folder:  %d files\n", localCount)
 	fmt.Printf("  Sync folder:  %d files\n", syncCount)
@@ -246,7 +264,7 @@ func initProject(cfg *config.Config, st *state.State, project *config.Project, v
 		DryRun:       false,
 		Verbose:      verbose,
 		SyncrDataDir: cfg.SyncrDataDir(),
-		Excludes:     cfg.ResolvedExcludes(project.Name),
+		Excludes:     excludes,
 	}
 
 	ctx := context.Background()
@@ -273,19 +291,10 @@ func pathExists(path string) bool {
 	return err == nil
 }
 
-// countFiles returns the number of files (not directories) in a path.
-func countFiles(path string) int {
-	count := 0
-	filepath.WalkDir(path, func(p string, d os.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if !d.IsDir() {
-			count++
-		}
-		return nil
-	})
-	return count
+// countFiles returns the number of included files in a path.
+func countFiles(path string, excludes []string) (int, error) {
+	snapshot, err := sync.TakeSnapshot(path, excludes...)
+	return snapshot.FileCount, err
 }
 
 // createStarterConfig creates an initial syncr.json with a sample project.

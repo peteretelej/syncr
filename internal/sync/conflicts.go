@@ -36,9 +36,9 @@ func ConflictSuffixPattern(suffix string) *regexp.Regexp {
 
 // CountConflicts returns the number of conflict files in the given directory tree.
 // The suffix parameter specifies the conflict suffix to match; use "" for the default
-// rclone "conflict" pattern.
-func CountConflicts(path string, suffix string) (int, error) {
-	conflicts, err := ListConflicts(path, suffix)
+// rclone "conflict" pattern. Optional excludes use rclone filter syntax.
+func CountConflicts(path string, suffix string, excludes ...string) (int, error) {
+	conflicts, err := ListConflicts(path, suffix, excludes...)
 	if err != nil {
 		return 0, err
 	}
@@ -48,17 +48,29 @@ func CountConflicts(path string, suffix string) (int, error) {
 // ListConflicts returns all conflict file paths in the given directory tree.
 // Conflict files are identified by matching the configured suffix pattern.
 // If suffix is empty, the default rclone pattern is used (e.g., file.conflict1).
-func ListConflicts(path string, suffix string) ([]string, error) {
+// Optional excludes use rclone filter syntax.
+func ListConflicts(path string, suffix string, excludes ...string) ([]string, error) {
 	var conflicts []string
 	re := ConflictSuffixPattern(suffix)
+	fi, err := newExcludeFilter(excludes)
+	if err != nil {
+		return nil, err
+	}
 
-	err := filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			// Skip directories we can't access
 			if d != nil && d.IsDir() {
 				return filepath.SkipDir
 			}
 			return err
+		}
+
+		if !includedPath(fi, path, p, d) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 
 		// Skip directories
@@ -88,8 +100,9 @@ func ListConflicts(path string, suffix string) ([]string, error) {
 
 // HasConflicts returns true if there are any conflict files in the directory.
 // The suffix parameter specifies the conflict suffix to match; use "" for the default.
-func HasConflicts(path string, suffix string) (bool, error) {
-	count, err := CountConflicts(path, suffix)
+// Optional excludes use rclone filter syntax.
+func HasConflicts(path string, suffix string, excludes ...string) (bool, error) {
+	count, err := CountConflicts(path, suffix, excludes...)
 	if err != nil {
 		return false, err
 	}
