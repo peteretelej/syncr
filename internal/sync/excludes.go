@@ -52,7 +52,8 @@ func includedDir(fi *filter.Filter, root, path string) bool {
 	if !ok {
 		return false
 	}
-	// No ExcludeFile options are configured, so the nil Fs is never used.
+	// The only error source is ExcludeFile lookups, which are never configured
+	// here, so the nil Fs is unused and err is always nil in practice.
 	include, err := fi.IncludeDirectory(context.Background(), nil)(remote)
 	if err != nil {
 		return true
