@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -148,6 +149,12 @@ func TestRunDiscoverAppliesDistinctNestedNames(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(scanRoot, "project", "_docs", "prds"), 0755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(scanRoot, "project", "_docs", "parent.txt"), []byte("parent"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(scanRoot, "project", "_docs", "prds", "child.txt"), []byte("child"), 0644); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.Mkdir(syncRoot, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -181,6 +188,23 @@ func TestRunDiscoverAppliesDistinctNestedNames(t *testing.T) {
 	}
 	if paths := []string{saved.Projects[0].SyncPath, saved.Projects[1].SyncPath}; paths[0] == paths[1] || strings.HasPrefix(paths[1], paths[0]+"/") || strings.HasPrefix(paths[0], paths[1]+"/") {
 		t.Fatalf("nested matches retained overlapping destinations: %v", paths)
+	}
+	parent := saved.GetProject("project-_docs")
+	child := saved.GetProject("project-_docs-prds")
+	if parent == nil || child == nil {
+		t.Fatalf("nested projects not found: %+v", saved.Projects)
+	}
+	if !slices.Contains(parent.Exclude, "/prds/**") {
+		t.Fatalf("parent excludes = %v, want child subtree excluded", parent.Exclude)
+	}
+	if _, err := os.Stat(filepath.Join(syncRoot, parent.SyncPath, "parent.txt")); err != nil {
+		t.Fatalf("parent-owned file was not synced: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(syncRoot, parent.SyncPath, "prds", "child.txt")); !os.IsNotExist(err) {
+		t.Fatalf("child-owned file reached parent mirror: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(syncRoot, child.SyncPath, "child.txt")); err != nil {
+		t.Fatalf("child-owned file was not synced by child project: %v", err)
 	}
 }
 

@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -52,6 +53,7 @@ type ManualWin struct {
 // Plan describes all config changes and no-op classifications from a scan.
 type Plan struct {
 	Adds       []config.Project
+	Excludes   map[string][]string
 	Keeps      []string
 	Disables   []string
 	Reenables  []string
@@ -206,6 +208,7 @@ func BuildPlan(candidates []Candidate, coverage ScanCoverage, cfg *config.Config
 		})
 		state.MissedCount[candidate.LocalPath] = 0
 	}
+	assignNestedExcludes(&plan, cfg.Projects, found)
 
 	for _, project := range cfg.Projects {
 		if !project.Discovered || found[project.LocalPath] || !project.Enabled {
@@ -221,6 +224,39 @@ func BuildPlan(candidates []Candidate, coverage ScanCoverage, cfg *config.Config
 		}
 	}
 	return plan
+}
+
+func assignNestedExcludes(plan *Plan, projects []config.Project, found map[string]bool) {
+	active := append([]config.Project(nil), plan.Adds...)
+	for _, project := range projects {
+		if project.Discovered && found[project.LocalPath] {
+			active = append(active, project)
+		}
+	}
+	for parentIndex := range active {
+		for childIndex := range active {
+			if parentIndex == childIndex || !isWithin(active[parentIndex].LocalPath, active[childIndex].LocalPath) {
+				continue
+			}
+			relative, err := filepath.Rel(active[parentIndex].LocalPath, active[childIndex].LocalPath)
+			if err != nil || relative == "." {
+				continue
+			}
+			pattern := "/" + filepath.ToSlash(relative) + "/**"
+			if slices.Contains(active[parentIndex].Exclude, pattern) {
+				continue
+			}
+			active[parentIndex].Exclude = append(active[parentIndex].Exclude, pattern)
+			if addition := projectByIdentity(plan.Adds, active[parentIndex]); addition != nil {
+				addition.Exclude = append(addition.Exclude, pattern)
+			} else {
+				if plan.Excludes == nil {
+					plan.Excludes = make(map[string][]string)
+				}
+				plan.Excludes[active[parentIndex].Name] = append(plan.Excludes[active[parentIndex].Name], pattern)
+			}
+		}
+	}
 }
 
 func (coverage ScanCoverage) observed(localPath string) bool {
@@ -284,6 +320,11 @@ func ApplyPlan(plan Plan, cfg *config.Config) error {
 	for _, name := range plan.Reenables {
 		if project := cfg.GetProject(name); project != nil && project.Discovered {
 			project.Enabled = true
+		}
+	}
+	for name, patterns := range plan.Excludes {
+		if project := cfg.GetProject(name); project != nil && project.Discovered {
+			project.Exclude = append(project.Exclude, patterns...)
 		}
 	}
 	if err := cfg.Validate(); err != nil {
