@@ -29,6 +29,13 @@ type Candidate struct {
 	SyncPath  string
 }
 
+// ScanCoverage records which roots were walked and which subtrees could not be
+// observed. It prevents a partial scan from treating unknown folders as gone.
+type ScanCoverage struct {
+	Roots      []string
+	Incomplete []string
+}
+
 // ScanState tracks discovery timing and consecutive missing folders.
 type ScanState struct {
 	LastScan    time.Time      `json:"last_scan"`
@@ -53,14 +60,14 @@ type Plan struct {
 }
 
 // Scan walks configured roots without reading ignore files or writing state.
-func Scan(cfg *config.Config) ([]Candidate, []string, error) {
+func Scan(cfg *config.Config) ([]Candidate, ScanCoverage, []string, error) {
 	if cfg.Discover == nil {
-		return nil, nil, nil
+		return nil, ScanCoverage{}, nil, nil
 	}
 
 	fi, err := newExcludeFilter(cfg.Discover.ExcludeGlobs)
 	if err != nil {
-		return nil, nil, err
+		return nil, ScanCoverage{}, nil, err
 	}
 	names := make(map[string]bool, len(cfg.Discover.FolderNames))
 	for _, name := range cfg.Discover.FolderNames {
@@ -68,15 +75,18 @@ func Scan(cfg *config.Config) ([]Candidate, []string, error) {
 	}
 
 	var candidates []Candidate
+	coverage := ScanCoverage{}
 	var warnings []string
 	for _, configuredRoot := range cfg.Discover.ScanRoots {
 		root, err := filepath.Abs(configuredRoot)
 		if err != nil {
-			return nil, warnings, fmt.Errorf("resolving scan root %q: %w", configuredRoot, err)
+			return nil, coverage, warnings, fmt.Errorf("resolving scan root %q: %w", configuredRoot, err)
 		}
+		coverage.Roots = append(coverage.Roots, root)
 		matched := make(map[string][]string)
 		err = filepath.WalkDir(root, func(current string, entry fs.DirEntry, walkErr error) error {
 			if walkErr != nil {
+				coverage.Incomplete = append(coverage.Incomplete, current)
 				warnings = append(warnings, fmt.Sprintf("cannot read %s: %v", current, walkErr))
 				if entry != nil && entry.IsDir() {
 					return filepath.SkipDir
@@ -95,12 +105,14 @@ func Scan(cfg *config.Config) ([]Candidate, []string, error) {
 				return nil
 			}
 			if current != root && isJunkDirectory(entry.Name()) {
+				coverage.Incomplete = append(coverage.Incomplete, current)
 				return filepath.SkipDir
 			}
 			if !includedDir(fi, root, current) {
+				coverage.Incomplete = append(coverage.Incomplete, current)
 				return filepath.SkipDir
 			}
-			if !names[entry.Name()] {
+			if current == root || !names[entry.Name()] {
 				return nil
 			}
 			for _, ancestor := range matched[entry.Name()] {
@@ -122,14 +134,14 @@ func Scan(cfg *config.Config) ([]Candidate, []string, error) {
 			return nil
 		})
 		if err != nil {
-			return nil, warnings, fmt.Errorf("scanning %s: %w", root, err)
+			return nil, coverage, warnings, fmt.Errorf("scanning %s: %w", root, err)
 		}
 	}
-	return candidates, warnings, nil
+	return candidates, coverage, warnings, nil
 }
 
 // BuildPlan classifies candidates and updates the caller-owned in-memory state.
-func BuildPlan(candidates []Candidate, cfg *config.Config, state *ScanState) Plan {
+func BuildPlan(candidates []Candidate, coverage ScanCoverage, cfg *config.Config, state *ScanState) Plan {
 	if state.MissedCount == nil {
 		state.MissedCount = make(map[string]int)
 	}
@@ -180,10 +192,15 @@ func BuildPlan(candidates []Candidate, cfg *config.Config, state *ScanState) Pla
 			continue
 		}
 
+		syncPath := candidate.SyncPath
+		if syncPathOverlapsProjects(syncPath, cfg.Projects, plan.Adds) {
+			syncPath = availableSyncPath(candidate.Name, cfg.Projects, plan.Adds)
+			plan.Warnings = append(plan.Warnings, fmt.Sprintf("nested discovery destination remapped: %s -> %s", candidate.SyncPath, syncPath))
+		}
 		plan.Adds = append(plan.Adds, config.Project{
 			Name:       candidate.Name,
 			LocalPath:  candidate.LocalPath,
-			SyncPath:   candidate.SyncPath,
+			SyncPath:   syncPath,
 			Enabled:    true,
 			Discovered: true,
 		})
@@ -194,6 +211,9 @@ func BuildPlan(candidates []Candidate, cfg *config.Config, state *ScanState) Pla
 		if !project.Discovered || found[project.LocalPath] || !project.Enabled {
 			continue
 		}
+		if !coverage.observed(project.LocalPath) {
+			continue
+		}
 		state.MissedCount[project.LocalPath]++
 		if state.MissedCount[project.LocalPath] >= VanishThreshold {
 			state.MissedCount[project.LocalPath] = VanishThreshold
@@ -201,6 +221,51 @@ func BuildPlan(candidates []Candidate, cfg *config.Config, state *ScanState) Pla
 		}
 	}
 	return plan
+}
+
+func (coverage ScanCoverage) observed(localPath string) bool {
+	for _, root := range coverage.Roots {
+		if !isWithin(root, localPath) {
+			continue
+		}
+		complete := true
+		for _, incomplete := range coverage.Incomplete {
+			if isWithin(root, incomplete) && isWithin(incomplete, localPath) {
+				complete = false
+				break
+			}
+		}
+		if complete {
+			return true
+		}
+	}
+	return false
+}
+
+func syncPathOverlapsProjects(syncPath string, projects, additions []config.Project) bool {
+	for _, project := range projects {
+		if pathsOverlap(syncPath, project.SyncPath) {
+			return true
+		}
+	}
+	for _, project := range additions {
+		if pathsOverlap(syncPath, project.SyncPath) {
+			return true
+		}
+	}
+	return false
+}
+
+func availableSyncPath(base string, projects, additions []config.Project) string {
+	for suffix := 1; ; suffix++ {
+		candidate := base
+		if suffix > 1 {
+			candidate = fmt.Sprintf("%s-%d", base, suffix)
+		}
+		if !syncPathOverlapsProjects(candidate, projects, additions) && !isReserved(candidate) {
+			return candidate
+		}
+	}
 }
 
 // ApplyPlan mutates cfg without saving it and rolls back invalid results.

@@ -38,7 +38,7 @@ func TestScan(t *testing.T) {
 		FolderNames:  []string{"_docs", "prds"},
 		ExcludeGlobs: []string{"excluded/**", ".worktrees"},
 	}}
-	candidates, warnings, err := Scan(cfg)
+	candidates, _, warnings, err := Scan(cfg)
 	if err != nil {
 		t.Fatalf("Scan() error = %v", err)
 	}
@@ -80,7 +80,7 @@ func TestScanToleratesUnreadableDirectory(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chmod(locked, 0755) })
 
 	cfg := &config.Config{Discover: &config.Discover{ScanRoots: []string{root}, FolderNames: []string{"_docs"}}}
-	_, warnings, err := Scan(cfg)
+	_, _, warnings, err := Scan(cfg)
 	if err != nil {
 		t.Fatalf("Scan() error = %v", err)
 	}
@@ -114,7 +114,7 @@ func TestBuildPlanAndApply(t *testing.T) {
 		{Name: "new", LocalPath: filepath.Join(root, "new"), SyncPath: "new"},
 	}
 	state := &ScanState{MissedCount: map[string]int{filepath.Join(root, "gone"): VanishThreshold - 1}}
-	plan := BuildPlan(candidates, cfg, state)
+	plan := BuildPlan(candidates, ScanCoverage{Roots: []string{root}}, cfg, state)
 
 	if len(plan.Adds) != 1 || plan.Adds[0].Name != "new" || !plan.Adds[0].Enabled || !plan.Adds[0].Discovered {
 		t.Errorf("Adds = %+v, want one enabled discovered project", plan.Adds)
@@ -174,12 +174,13 @@ func TestBuildPlanDeduplicatesCandidatesAndNeverDeletes(t *testing.T) {
 		{Name: "one", LocalPath: filepath.Join(root, "other"), SyncPath: "other"},
 		{Name: "three", LocalPath: filepath.Join(root, "three"), SyncPath: "one"},
 	}
-	plan := BuildPlan(candidates, cfg, state)
+	coverage := ScanCoverage{Roots: []string{root}}
+	plan := BuildPlan(candidates, coverage, cfg, state)
 	if len(plan.Adds) != 1 || len(plan.Warnings) != 2 {
 		t.Fatalf("plan = %+v, want one add and two warnings", plan)
 	}
 	for range VanishThreshold - 1 {
-		plan = BuildPlan(nil, cfg, state)
+		plan = BuildPlan(nil, coverage, cfg, state)
 	}
 	if strings.Join(plan.Disables, ",") != "missing" {
 		t.Fatalf("Disables = %v, want missing", plan.Disables)
@@ -190,9 +191,45 @@ func TestBuildPlanDeduplicatesCandidatesAndNeverDeletes(t *testing.T) {
 	if len(cfg.Projects) != 1 {
 		t.Errorf("ApplyPlan deleted projects: %+v", cfg.Projects)
 	}
-	plan = BuildPlan(nil, cfg, state)
+	plan = BuildPlan(nil, coverage, cfg, state)
 	if len(plan.Disables) != 0 || state.MissedCount[filepath.Join(root, "missing")] != VanishThreshold {
 		t.Errorf("disabled project counter did not stop: plan=%+v state=%+v", plan, state)
+	}
+}
+
+func TestBuildPlanPreservesProjectsAfterIncompleteScans(t *testing.T) {
+	root := t.TempDir()
+	projectPath := filepath.Join(root, "area", "project", "_docs")
+	tests := []struct {
+		name     string
+		coverage ScanCoverage
+	}{
+		{name: "missing root", coverage: ScanCoverage{Roots: []string{root}, Incomplete: []string{root}}},
+		{name: "unreadable subtree", coverage: ScanCoverage{Roots: []string{root}, Incomplete: []string{filepath.Join(root, "area")}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := &config.Config{
+				SyncRoot:            t.TempDir(),
+				SyncIntervalMinutes: 5,
+				Projects: []config.Project{{
+					Name: "project-_docs", LocalPath: projectPath, SyncPath: "project/_docs", Enabled: true, Discovered: true,
+				}},
+			}
+			state := &ScanState{MissedCount: map[string]int{projectPath: 1}}
+			for range VanishThreshold {
+				plan := BuildPlan(nil, tt.coverage, cfg, state)
+				if len(plan.Disables) != 0 {
+					t.Fatalf("incomplete scan disabled project: %+v", plan)
+				}
+				if err := ApplyPlan(plan, cfg); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if state.MissedCount[projectPath] != 1 || !cfg.Projects[0].Enabled {
+				t.Fatalf("incomplete scans changed project state: count=%d enabled=%v", state.MissedCount[projectPath], cfg.Projects[0].Enabled)
+			}
+		})
 	}
 }
 
@@ -222,12 +259,12 @@ func TestScanAndPlanDoNotPersist(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	candidates, _, err := Scan(cfg)
+	candidates, coverage, _, err := Scan(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}
 	state := &ScanState{}
-	plan := BuildPlan(candidates, cfg, state)
+	plan := BuildPlan(candidates, coverage, cfg, state)
 	after, err := os.Stat(configPath)
 	if err != nil {
 		t.Fatal(err)

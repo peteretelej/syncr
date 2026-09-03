@@ -40,11 +40,11 @@ func runDiscover(args []string, configPath string, verbose, dryRun bool, out, er
 	if err != nil {
 		return err
 	}
-	candidates, warnings, err := discover.Scan(cfg)
+	candidates, coverage, warnings, err := discover.Scan(cfg)
 	if err != nil {
 		return err
 	}
-	plan := discover.BuildPlan(candidates, cfg, scanState)
+	plan := discover.BuildPlan(candidates, coverage, cfg, scanState)
 	printDiscoveryPlan(out, plan, append(warnings, plan.Warnings...))
 	if dryRun {
 		fmt.Fprintln(out, "Dry run: no changes applied.")
@@ -107,11 +107,11 @@ func runScheduledDiscovery(cfg *config.Config, st *state.State, verbose, dryRun 
 		return false, nil
 	}
 
-	candidates, warnings, err := discover.Scan(cfg)
+	candidates, coverage, warnings, err := discover.Scan(cfg)
 	if err != nil {
 		return false, err
 	}
-	plan := discover.BuildPlan(candidates, cfg, scanState)
+	plan := discover.BuildPlan(candidates, coverage, cfg, scanState)
 	for _, warning := range append(warnings, plan.Warnings...) {
 		log.Warn("Folder discovery: %s", warning)
 	}

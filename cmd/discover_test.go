@@ -107,6 +107,83 @@ func TestRunDiscoverAppliesPersistsAndInitializes(t *testing.T) {
 	}
 }
 
+func TestRunDiscoverNeverAddsMatchingScanRoot(t *testing.T) {
+	root := t.TempDir()
+	setTestHome(t, root)
+	scanRoot := filepath.Join(root, "_docs")
+	syncRoot := filepath.Join(root, "sync")
+	if err := os.MkdirAll(scanRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(syncRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
+	configPath := writeDiscoveryConfig(t, root, syncRoot, scanRoot, nil)
+
+	var out, errOut bytes.Buffer
+	if err := runDiscover(nil, configPath, false, false, &out, &errOut); err != nil {
+		t.Fatalf("runDiscover() error = %v", err)
+	}
+	cfg, err := config.Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Projects) != 0 {
+		t.Fatalf("matching scan root produced projects: %+v", cfg.Projects)
+	}
+	st, err := state.Load(cfg.SyncrDataDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st.IsInitialized(".") {
+		t.Fatal("matching scan root initialized the entire sync root")
+	}
+}
+
+func TestRunDiscoverAppliesDistinctNestedNames(t *testing.T) {
+	root := t.TempDir()
+	setTestHome(t, root)
+	scanRoot := filepath.Join(root, "scan")
+	syncRoot := filepath.Join(root, "sync")
+	if err := os.MkdirAll(filepath.Join(scanRoot, "project", "_docs", "prds"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(syncRoot, 0755); err != nil {
+		t.Fatal(err)
+	}
+	configPath := filepath.Join(root, "syncr.json")
+	cfg := config.Config{
+		SyncRoot: syncRoot, SyncIntervalMinutes: 5,
+		Discover: &config.Discover{ScanRoots: []string{scanRoot}, FolderNames: []string{"_docs", "prds"}},
+		Projects: []config.Project{},
+	}
+	data, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	if err := runDiscover(nil, configPath, false, false, &out, &errOut); err != nil {
+		t.Fatalf("runDiscover() error = %v\n%s", err, errOut.String())
+	}
+	saved, err := config.Load(configPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(saved.Projects) != 2 {
+		t.Fatalf("nested matches produced %d projects: %+v", len(saved.Projects), saved.Projects)
+	}
+	if err := saved.Validate(); err != nil {
+		t.Fatalf("nested matches produced invalid config: %v", err)
+	}
+	if paths := []string{saved.Projects[0].SyncPath, saved.Projects[1].SyncPath}; paths[0] == paths[1] || strings.HasPrefix(paths[1], paths[0]+"/") || strings.HasPrefix(paths[0], paths[1]+"/") {
+		t.Fatalf("nested matches retained overlapping destinations: %v", paths)
+	}
+}
+
 func TestRunDiscoverRejectsArgumentsAndMissingConfigBlock(t *testing.T) {
 	var out, errOut bytes.Buffer
 	if err := runDiscover([]string{"--dry-run"}, "", false, false, &out, &errOut); err == nil || !strings.Contains(errOut.String(), "Usage:") {
