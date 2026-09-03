@@ -320,6 +320,7 @@ func TestRunScheduledDiscoveryAppliesWhenDue(t *testing.T) {
 func setTestHome(t *testing.T, home string) {
 	t.Helper()
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 }
 
 func writeDiscoveryConfig(t *testing.T, dir, syncRoot, scanRoot string, projects []config.Project) string {

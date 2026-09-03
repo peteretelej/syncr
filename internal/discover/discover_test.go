@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -29,8 +30,10 @@ func TestScan(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("_docs/\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(root, filepath.Join(root, "loop")); err != nil {
-		t.Fatal(err)
+	if runtime.GOOS != "windows" {
+		if err := os.Symlink(root, filepath.Join(root, "loop")); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	cfg := &config.Config{Discover: &config.Discover{
@@ -63,12 +66,15 @@ func TestScan(t *testing.T) {
 			t.Errorf("unexpected candidate %q", unwanted)
 		}
 	}
-	if !containsSubstring(warnings, "symlink loop skipped") {
+	if runtime.GOOS != "windows" && !containsSubstring(warnings, "symlink loop skipped") {
 		t.Errorf("warnings = %v, want symlink loop warning", warnings)
 	}
 }
 
 func TestScanToleratesUnreadableDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod-based unreadability is a no-op on Windows ACLs; cannot inject the condition")
+	}
 	root := t.TempDir()
 	locked := filepath.Join(root, "locked")
 	if err := os.MkdirAll(filepath.Join(locked, "_docs"), 0755); err != nil {

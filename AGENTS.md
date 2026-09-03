@@ -151,6 +151,17 @@ go test -v ./...
 - Errors: return error, let caller handle exit
 - Context: pass `context.Context` for cancellation
 
+## Cross-Platform Considerations
+
+syncr ships and tests on Linux, macOS, and Windows. CI runs all three; `scripts/pre-push.sh` runs Linux only, so CI is the Windows/macOS gate.
+
+- **Paths**: use `filepath.Join`/`filepath.Clean`; convert slash-based literals with `filepath.FromSlash`/`filepath.ToSlash`. Never build or compare paths by raw string concat with `/`.
+- **Home directory**: `os.UserHomeDir()` reads `$HOME` on Unix but `%USERPROFILE%` on Windows. Tests isolating the home dir must set both (see `setTestHome` in `cmd/discover_test.go`), or use `Config.SetLocalDataDir` instead of env vars.
+- **Failure injection**: `chmod 0` does not make paths unreadable under Windows ACLs, and symlink creation/loops need privileges and resolve differently on Windows. Guard such tests with `runtime.GOOS` checks or `t.Skip` with the reason documented.
+- **Permissions**: modes like `0644`/`0755` are mostly no-ops on Windows; never assert permission bits cross-platform.
+- **Names**: Windows reserves device names (`CON`, `PRN`, `AUX`, `NUL`, `COM1`-`COM9`) and is case-insensitive; avoid fixtures relying on case-only distinctions.
+- After pushing changes touching filesystem, paths, env, or process behavior, check the CI run for all three OSes before considering the change done.
+
 ## File Locations
 
 ```
