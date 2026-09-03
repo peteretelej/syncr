@@ -10,6 +10,7 @@ Keeps local folders in sync with cloud storage (OneDrive, Dropbox, Google Drive)
 - **State tracking** - remembers sync history, detects conflicts
 - **Daemon mode** - continuous background sync with config hot-reload ([run as a service](docs/service.md))
 - **Multi-project** - sync multiple folders with one config
+- **Folder discovery** - find and sync matching folders across project trees
 - **Cross-platform** - macOS, Linux, Windows
 
 ## Install
@@ -75,6 +76,7 @@ Usage:
 Commands:
   init [project]      Initialize project(s) (all uninitialized if no name given)
   add <name> [path]   Add a new project interactively
+  discover            Find configured folder names and update projects
   sync [project]      Run sync once (all projects if no name given)
   daemon              Run continuous sync daemon
   status              Show status of all projects
@@ -97,6 +99,7 @@ Examples:
   syncr init                   Initialize all uninitialized enabled projects
   syncr init MyProject        Initialize a specific project
   syncr add docs ~/Projects/docs   Add and initialize a project
+  syncr -dry-run discover       Preview folder discovery changes
   syncr sync                  Sync all enabled projects
   syncr sync MyProject        Sync specific project
   syncr daemon                Run continuous sync every 5 minutes
@@ -150,6 +153,40 @@ export SYNCR_CONFIG=~/syncr.json
 | `projects[].exclude` | Optional project-specific patterns, added to global exclusions |
 
 Exclude patterns use rclone filter syntax. Global and project-level patterns are combined for initialization, one-shot sync, and daemon sync.
+
+## Folder discovery
+
+Folder discovery lets you sync every folder named `_docs`, `prds`, or `notes` across all your projects, without listing them by hand.
+
+Add a `discover` block to your config. There are no default folder names, and an absent block leaves folder discovery off.
+
+```json
+{
+  "sync_root": "/Users/You/OneDrive/syncr",
+  "discover": {
+    "scan_roots": ["/Users/You/Projects"],
+    "folder_names": ["_docs", "_scratch", "_planning", "prds"],
+    "exclude_globs": [".worktrees", "node_modules"],
+    "scan_interval_hours": 24
+  },
+  "projects": []
+}
+```
+
+Preview the plan before applying it:
+
+```text
+$ syncr -dry-run discover
+Folder discovery plan:
+  Add "webapp-_docs"
+    Local: /Users/You/Projects/webapp/_docs
+    Sync:  webapp/_docs
+  Keep: 2
+  Manual project wins for "notes" (name exists): /Users/You/Projects/notes
+Dry run: no changes applied.
+```
+
+Folder discovery walks the filesystem directly, so it finds gitignored folders without applying ignore-file rules. It always skips `.git` and `node_modules`, and `exclude_globs` can prune additional subtrees. Applying a plan never deletes config entries: folders missing for three consecutive scans are disabled, and are re-enabled if they reappear. Newly discovered folders are bisync-initialized automatically. Full `syncr sync` runs and the daemon periodically rescan according to `scan_interval_hours`; targeted `syncr sync <project>` runs do not.
 
 ## How It Works
 

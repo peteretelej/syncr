@@ -4,6 +4,12 @@
   "backup_retention_days": 30,
   "conflict_resolve": "newer",
   "exclude": [".env", "*.tmp"],
+  "discover": {
+    "scan_roots": ["C:\\Users\\You\\Projects"],
+    "folder_names": ["_docs", "_scratch", "_planning", "prds"],
+    "exclude_globs": [".worktrees", "node_modules"],
+    "scan_interval_hours": 24
+  },
   "projects": [
     {
       "name": "webapp-docs",

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/peteretelej/syncr/internal/config"
 )
@@ -19,6 +20,7 @@ func TestScan(t *testing.T) {
 		".git/_docs",
 		"node_modules/_docs",
 		"excluded/_docs",
+		"project/.worktrees/branch/_docs",
 	} {
 		if err := os.MkdirAll(filepath.Join(root, filepath.FromSlash(dir)), 0755); err != nil {
 			t.Fatal(err)
@@ -34,7 +36,7 @@ func TestScan(t *testing.T) {
 	cfg := &config.Config{Discover: &config.Discover{
 		ScanRoots:    []string{root},
 		FolderNames:  []string{"_docs", "prds"},
-		ExcludeGlobs: []string{"excluded/**"},
+		ExcludeGlobs: []string{"excluded/**", ".worktrees"},
 	}}
 	candidates, warnings, err := Scan(cfg)
 	if err != nil {
@@ -56,7 +58,7 @@ func TestScan(t *testing.T) {
 			t.Errorf("missing candidate %q; got %v", want, got)
 		}
 	}
-	for _, unwanted := range []string{"project/_docs/nested/_docs", ".git/_docs", "node_modules/_docs", "excluded/_docs"} {
+	for _, unwanted := range []string{"project/_docs/nested/_docs", ".git/_docs", "node_modules/_docs", "excluded/_docs", "project/.worktrees/branch/_docs"} {
 		if got[unwanted] {
 			t.Errorf("unexpected candidate %q", unwanted)
 		}
@@ -291,6 +293,39 @@ func TestInvalidApplyAndSaveDoNotPersist(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(cfg.SyncrDataDir(), scanStateFilename)); !os.IsNotExist(err) {
 		t.Errorf("state file persisted for invalid config: %v", err)
+	}
+}
+
+func TestScanDue(t *testing.T) {
+	cfg := &config.Config{Discover: &config.Discover{ScanIntervalHours: 6}}
+	if !ScanDue(ScanState{}, cfg) {
+		t.Fatal("zero LastScan should be due")
+	}
+	if ScanDue(ScanState{LastScan: time.Now().Add(-5 * time.Hour)}, cfg) {
+		t.Fatal("recent scan should not be due")
+	}
+	if !ScanDue(ScanState{LastScan: time.Now().Add(-7 * time.Hour)}, cfg) {
+		t.Fatal("old scan should be due")
+	}
+	if ScanDue(ScanState{}, &config.Config{}) {
+		t.Fatal("unconfigured folder discovery should not be due")
+	}
+}
+
+func TestMissingDiscovered(t *testing.T) {
+	root := t.TempDir()
+	existing := filepath.Join(root, "existing")
+	if err := os.Mkdir(existing, 0755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.Config{Projects: []config.Project{
+		{Name: "present", LocalPath: existing, Discovered: true},
+		{Name: "missing", LocalPath: filepath.Join(root, "missing"), Discovered: true},
+		{Name: "manual", LocalPath: filepath.Join(root, "manual")},
+	}}
+	missing := MissingDiscovered(cfg)
+	if len(missing) != 1 || missing[0].Name != "missing" {
+		t.Fatalf("MissingDiscovered() = %+v, want missing discovered project", missing)
 	}
 }
 

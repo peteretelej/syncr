@@ -35,8 +35,10 @@ func main() {
 		cmd.Init(args[1:], configPath, *verbose, *dryRun)
 	case "sync":
 		cmd.Sync(args[1:], configPath, *verbose, *dryRun)
+	case "discover":
+		cmd.Discover(args[1:], configPath, *verbose, *dryRun)
 	case "daemon":
-		cmd.Daemon(configPath, *verbose)
+		cmd.Daemon(configPath, *verbose, *dryRun)
 	case "status":
 		cmd.Status(configPath)
 	case "config":
@@ -69,6 +71,7 @@ Usage:
 Commands:
   init [project]      Initialize project(s) (all uninitialized if no name given)
   add <name> [path]   Add a new project interactively
+  discover            Find configured folder names and update projects
   sync [project]      Run sync once (all projects if no name given)
   daemon              Run continuous sync daemon
   status              Show status of all projects
@@ -91,6 +94,7 @@ Examples:
   syncr init                   Initialize all uninitialized enabled projects
   syncr init MyProject        Initialize a specific project
   syncr add docs ~/Projects/docs   Add and initialize a project
+  syncr -dry-run discover       Preview folder discovery changes
   syncr sync                  Sync all enabled projects
   syncr sync MyProject        Sync specific project
   syncr daemon                Run continuous sync every 5 minutes

@@ -29,6 +29,7 @@ internal/sync/bisync.go --> rclone bisync --> sync_root/{project}/
 | `cmd/daemon.go` | Continuous sync loop |
 | `cmd/status.go` | Show project status, conflicts |
 | `cmd/config.go` | Display configuration |
+| `internal/discover/` | Folder discovery scan, planning, and state |
 | `internal/config/config.go` | Config loading and validation |
 | `internal/state/state.go` | Sync state tracking |
 | `internal/sync/bisync.go` | rclone bisync wrapper |
@@ -47,6 +48,12 @@ internal/sync/bisync.go --> rclone bisync --> sync_root/{project}/
   "backup_retention_days": 30,
   "conflict_resolve": "newer",
   "conflict_suffix": "{DateOnly}",
+  "discover": {
+    "scan_roots": ["/Users/you/Projects"],
+    "folder_names": ["_docs", "_scratch", "_planning", "prds"],
+    "exclude_globs": [".worktrees", "node_modules"],
+    "scan_interval_hours": 24
+  },
   "projects": [
     {
       "name": "docs",
@@ -101,6 +108,12 @@ syncr init newproject
 
 ```bash
 syncr -dry-run sync
+```
+
+### Preview folder discovery
+
+```bash
+syncr -dry-run discover
 ```
 
 ### Check status

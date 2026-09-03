@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/peteretelej/syncr/internal/config"
+	"github.com/peteretelej/syncr/internal/discover"
+	"github.com/peteretelej/syncr/internal/logger"
 	"github.com/peteretelej/syncr/internal/progress"
 	"github.com/peteretelej/syncr/internal/state"
 	"github.com/peteretelej/syncr/internal/sync"
@@ -35,6 +37,17 @@ func Sync(args []string, configPath string, verbose, dryRun bool) {
 		os.Exit(1)
 	}
 
+	log := logger.NewStdout(verbose)
+	if _, err := runSyncDiscovery(args, cfg, st, verbose, dryRun, log); err != nil {
+		fmt.Fprintf(os.Stderr, "Error running folder discovery: %v\n", err)
+		os.Exit(1)
+	}
+
+	missingDiscovered := make(map[string]bool)
+	for _, project := range discover.MissingDiscovered(cfg) {
+		missingDiscovered[project.Name] = true
+	}
+
 	// Determine which projects to sync
 	var projectsToSync []*config.Project
 	if len(args) > 0 {
@@ -44,11 +57,19 @@ func Sync(args []string, configPath string, verbose, dryRun bool) {
 			fmt.Fprintf(os.Stderr, "Error: project %q not found in config\n", args[0])
 			os.Exit(1)
 		}
-		projectsToSync = []*config.Project{project}
+		if missingDiscovered[project.Name] {
+			log.Warn("%s: discovered local path missing, skipped: %s", project.Name, project.LocalPath)
+		} else {
+			projectsToSync = []*config.Project{project}
+		}
 	} else {
 		// All enabled projects
 		for i := range cfg.Projects {
 			if cfg.Projects[i].Enabled {
+				if missingDiscovered[cfg.Projects[i].Name] {
+					log.Warn("%s: discovered local path missing, skipped: %s", cfg.Projects[i].Name, cfg.Projects[i].LocalPath)
+					continue
+				}
 				projectsToSync = append(projectsToSync, &cfg.Projects[i])
 			}
 		}

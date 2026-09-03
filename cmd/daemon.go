@@ -10,13 +10,14 @@ import (
 	"time"
 
 	"github.com/peteretelej/syncr/internal/config"
+	"github.com/peteretelej/syncr/internal/discover"
 	"github.com/peteretelej/syncr/internal/logger"
 	"github.com/peteretelej/syncr/internal/state"
 	"github.com/peteretelej/syncr/internal/sync"
 )
 
 // Daemon runs the continuous sync loop.
-func Daemon(configPath string, verbose bool) {
+func Daemon(configPath string, verbose, dryRun bool) {
 	// Load config
 	cfg, err := config.Load(configPath)
 	if err != nil {
@@ -85,7 +86,7 @@ func Daemon(configPath string, verbose bool) {
 
 	// Run initial sync
 	log.Info("Running initial sync (%d projects)...", enabledCount)
-	runDaemonSync(ctx, cfg, st, log, warnedSkips)
+	runDaemonSync(ctx, cfg, st, log, warnedSkips, verbose, dryRun)
 
 	// Main loop
 	for {
@@ -111,7 +112,7 @@ func Daemon(configPath string, verbose bool) {
 				}
 			}
 			log.Info("Running scheduled sync (%d projects)...", scheduledEnabled)
-			runDaemonSync(ctx, cfg, st, log, warnedSkips)
+			runDaemonSync(ctx, cfg, st, log, warnedSkips, verbose, dryRun)
 
 		case <-ctx.Done():
 			log.Info("Received shutdown signal, shutting down...")
@@ -169,10 +170,22 @@ func maybeReloadConfig(configPath string, current *config.Config, lastModTime ti
 const MaxConsecutiveErrors = 5
 
 // runDaemonSync syncs all enabled, initialized projects.
-func runDaemonSync(ctx context.Context, cfg *config.Config, st *state.State, log *logger.Logger, warnedSkips map[string]bool) {
+func runDaemonSync(ctx context.Context, cfg *config.Config, st *state.State, log *logger.Logger, warnedSkips map[string]bool, verbose, dryRun bool) {
+	if _, err := runScheduledDiscovery(cfg, st, verbose, dryRun, log); err != nil {
+		log.Warn("Folder discovery failed: %v", err)
+	}
+
+	missingDiscovered := make(map[string]bool)
+	for _, project := range discover.MissingDiscovered(cfg) {
+		missingDiscovered[project.Name] = true
+	}
 
 	for _, project := range cfg.Projects {
 		if !project.Enabled {
+			continue
+		}
+		if missingDiscovered[project.Name] {
+			log.Warn("%s: discovered local path missing, skipped: %s", project.Name, project.LocalPath)
 			continue
 		}
 
@@ -199,14 +212,18 @@ func runDaemonSync(ctx context.Context, cfg *config.Config, st *state.State, log
 		if !pathExists(project.LocalPath) {
 			log.Warn("%s: local path missing: %s", project.Name, project.LocalPath)
 			log.Warn("  Fix: Ensure the directory exists or update config")
-			st.RecordError(project.Name, fmt.Errorf("local path missing: %s", project.LocalPath))
+			if !dryRun {
+				st.RecordError(project.Name, fmt.Errorf("local path missing: %s", project.LocalPath))
+			}
 			continue
 		}
 
 		if !pathExists(syncPath) {
 			log.Warn("%s: sync folder missing: %s", project.Name, syncPath)
 			log.Warn("  Fix: Run 'syncr init %s --force' to recreate sync folder from local files", project.Name)
-			st.RecordError(project.Name, fmt.Errorf("sync folder missing: %s", syncPath))
+			if !dryRun {
+				st.RecordError(project.Name, fmt.Errorf("sync folder missing: %s", syncPath))
+			}
 			continue
 		}
 
@@ -231,7 +248,7 @@ func runDaemonSync(ctx context.Context, cfg *config.Config, st *state.State, log
 
 		opts := sync.BisyncOptions{
 			Resync:          false,
-			DryRun:          false,
+			DryRun:          dryRun,
 			Verbose:         false,
 			SyncrDataDir:    cfg.SyncrDataDir(),
 			Excludes:        excludes,
@@ -244,7 +261,7 @@ func runDaemonSync(ctx context.Context, cfg *config.Config, st *state.State, log
 			trashPath := filepath.Join(cfg.TrashDir(project.Name), timestamp)
 			opts.BackupDir1 = trashPath
 			opts.BackupDir2 = trashPath
-			if cfg.BackupRetentionDays() > 0 {
+			if !dryRun && cfg.BackupRetentionDays() > 0 {
 				deleted, err := sync.CleanTrash(cfg.TrashDir(project.Name), cfg.BackupRetentionDays())
 				if err != nil {
 					log.Debug("%s: trash cleanup error: %v", project.Name, err)
@@ -259,7 +276,9 @@ func runDaemonSync(ctx context.Context, cfg *config.Config, st *state.State, log
 
 		if err != nil {
 			log.Error("%s: sync failed (%v)", project.Name, err)
-			st.RecordError(project.Name, err)
+			if !dryRun {
+				st.RecordError(project.Name, err)
+			}
 
 			// Check if this pushes us over the threshold
 			newErrorCount := st.GetProject(project.Name).ErrorCount
@@ -275,14 +294,18 @@ func runDaemonSync(ctx context.Context, cfg *config.Config, st *state.State, log
 
 		if conflictCount > 0 {
 			log.Warn("%s: synced with %d conflict(s) (%v)", project.Name, conflictCount, duration.Round(time.Millisecond))
-			st.RecordConflicts(project.Name, conflictCount)
+			if !dryRun {
+				st.RecordConflicts(project.Name, conflictCount)
+			}
 		} else {
 			log.Info("%s: synced (%v)", project.Name, duration.Round(time.Millisecond))
-			st.RecordSuccess(project.Name)
+			if !dryRun {
+				st.RecordSuccess(project.Name)
+			}
 		}
 
 		// Fire hooks after successful sync
-		if !snapErr && project.Hooks != nil {
+		if !dryRun && !snapErr && project.Hooks != nil {
 			hookTimeout := 30 * time.Second
 			if project.HookTimeoutSeconds > 0 {
 				hookTimeout = time.Duration(project.HookTimeoutSeconds) * time.Second
@@ -331,7 +354,9 @@ func runDaemonSync(ctx context.Context, cfg *config.Config, st *state.State, log
 	}
 
 	// Save state after each sync cycle
-	if err := st.Save(); err != nil {
-		log.Error("Failed to save state: %v", err)
+	if !dryRun {
+		if err := st.Save(); err != nil {
+			log.Error("Failed to save state: %v", err)
+		}
 	}
 }

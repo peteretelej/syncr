@@ -273,6 +273,30 @@ func SaveDiscovery(cfg *config.Config, state *ScanState) error {
 	return SaveScanState(cfg, state)
 }
 
+// ScanDue reports whether configured folder discovery should run now.
+func ScanDue(state ScanState, cfg *config.Config) bool {
+	if cfg.Discover == nil {
+		return false
+	}
+	interval := time.Duration(cfg.ResolvedScanIntervalHours()) * time.Hour
+	return state.LastScan.IsZero() || time.Since(state.LastScan) >= interval
+}
+
+// MissingDiscovered returns discovered projects whose local folders are absent.
+func MissingDiscovered(cfg *config.Config) []*config.Project {
+	var missing []*config.Project
+	for i := range cfg.Projects {
+		project := &cfg.Projects[i]
+		if !project.Discovered {
+			continue
+		}
+		if _, err := os.Stat(project.LocalPath); os.IsNotExist(err) {
+			missing = append(missing, project)
+		}
+	}
+	return missing
+}
+
 func newExcludeFilter(patterns []string) (*filter.Filter, error) {
 	if len(patterns) == 0 {
 		return nil, nil
@@ -284,6 +308,11 @@ func newExcludeFilter(patterns []string) (*filter.Filter, error) {
 	for _, pattern := range patterns {
 		if err := fi.Add(false, pattern); err != nil {
 			return nil, fmt.Errorf("invalid exclude pattern %q: %w", pattern, err)
+		}
+		if !strings.Contains(pattern, "/") {
+			if err := fi.Add(false, "**/"+pattern+"/**"); err != nil {
+				return nil, fmt.Errorf("invalid exclude pattern %q: %w", pattern, err)
+			}
 		}
 	}
 	return fi, nil
