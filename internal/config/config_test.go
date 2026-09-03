@@ -1911,3 +1911,76 @@ func TestValidateFull_ExcludePatterns(t *testing.T) {
 		}
 	})
 }
+
+func TestDiscoverConfigValidation(t *testing.T) {
+	tmpDir := t.TempDir()
+	valid := Config{
+		SyncRoot:            tmpDir,
+		SyncIntervalMinutes: 5,
+		Discover: &Discover{
+			ScanRoots:    []string{tmpDir},
+			FolderNames:  []string{"_docs"},
+			ExcludeGlobs: []string{"excluded/**"},
+		},
+	}
+	if err := valid.Validate(); err != nil {
+		t.Fatalf("valid discovery config rejected: %v", err)
+	}
+
+	tests := []struct {
+		name     string
+		discover *Discover
+		want     string
+	}{
+		{"absent", nil, ""},
+		{"missing roots", &Discover{FolderNames: []string{"_docs"}}, "scan_roots"},
+		{"missing names", &Discover{ScanRoots: []string{tmpDir}}, "folder_names"},
+		{"relative root", &Discover{ScanRoots: []string{"relative"}, FolderNames: []string{"_docs"}}, "absolute path"},
+		{"empty name", &Discover{ScanRoots: []string{tmpDir}, FolderNames: []string{""}}, "path component"},
+		{"name with separator", &Discover{ScanRoots: []string{tmpDir}, FolderNames: []string{"foo/bar"}}, "path component"},
+		{"bad exclude glob", &Discover{ScanRoots: []string{tmpDir}, FolderNames: []string{"_docs"}, ExcludeGlobs: []string{"["}}, "exclude_glob"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := valid
+			cfg.Discover = tt.discover
+			err := cfg.Validate()
+			if tt.want == "" {
+				if err != nil {
+					t.Fatalf("Validate() error = %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Validate() error = %v, want substring %q", err, tt.want)
+			}
+			full := cfg.ValidateFull()
+			found := false
+			for _, message := range full.Errors {
+				found = found || strings.Contains(message, tt.want)
+			}
+			if !found {
+				t.Errorf("ValidateFull() errors = %v, want substring %q", full.Errors, tt.want)
+			}
+		})
+	}
+}
+
+func TestResolvedScanIntervalHours(t *testing.T) {
+	for _, tt := range []struct {
+		name string
+		cfg  Config
+		want int
+	}{
+		{"absent", Config{}, 24},
+		{"zero", Config{Discover: &Discover{}}, 24},
+		{"negative", Config{Discover: &Discover{ScanIntervalHours: -1}}, 24},
+		{"configured", Config{Discover: &Discover{ScanIntervalHours: 12}}, 12},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := tt.cfg.ResolvedScanIntervalHours(); got != tt.want {
+				t.Errorf("ResolvedScanIntervalHours() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}

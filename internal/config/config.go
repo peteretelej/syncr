@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/rclone/rclone/fs/filter"
 )
 
 // ValidationResult holds categorized validation results.
@@ -46,11 +48,20 @@ type Config struct {
 	ConflictResolve         string    `json:"conflict_resolve,omitempty"`
 	ConflictSuffix          string    `json:"conflict_suffix,omitempty"`
 	Exclude                 []string  `json:"exclude,omitempty"`
+	Discover                *Discover `json:"discover,omitempty"`
 	Projects                []Project `json:"projects"`
 
 	path                string // file path (not serialized)
 	localDataDir        string // resolved local data directory (not serialized)
 	backupRetentionDays int    // resolved value (not serialized)
+}
+
+// Discover configures folder discovery.
+type Discover struct {
+	ScanRoots         []string `json:"scan_roots"`
+	FolderNames       []string `json:"folder_names"`
+	ExcludeGlobs      []string `json:"exclude_globs,omitempty"`
+	ScanIntervalHours int      `json:"scan_interval_hours,omitempty"`
 }
 
 // Hooks defines shell commands to run after sync events.
@@ -71,6 +82,7 @@ type Project struct {
 	Derived            map[string]string `json:"derived,omitempty"`
 	BackupDir          bool              `json:"backup_dir,omitempty"`
 	ConflictResolve    string            `json:"conflict_resolve,omitempty"`
+	Discovered         bool              `json:"discovered,omitempty"`
 }
 
 // Load loads configuration from the specified path or default location.
@@ -163,6 +175,10 @@ func (c *Config) Validate() error {
 
 	if c.SyncIntervalMinutes < 1 {
 		return errors.New("sync_interval_minutes must be at least 1")
+	}
+
+	if errs := discoverValidationErrors(c.Discover); len(errs) > 0 {
+		return errors.New(errs[0])
 	}
 
 	for _, pattern := range c.Exclude {
@@ -279,6 +295,8 @@ func (c *Config) ValidateFull() ValidationResult {
 	if c.SyncIntervalMinutes < 1 {
 		result.Errors = append(result.Errors, "sync_interval_minutes must be at least 1")
 	}
+
+	result.Errors = append(result.Errors, discoverValidationErrors(c.Discover)...)
 
 	for _, pattern := range c.Exclude {
 		if pattern == "" {
@@ -462,6 +480,48 @@ func (c *Config) GetProject(name string) *Project {
 // Defaults to 30 if not set in the config file.
 func (c *Config) BackupRetentionDays() int {
 	return c.backupRetentionDays
+}
+
+// ResolvedScanIntervalHours returns the configured discovery interval or 24.
+func (c *Config) ResolvedScanIntervalHours() int {
+	if c.Discover == nil || c.Discover.ScanIntervalHours <= 0 {
+		return 24
+	}
+	return c.Discover.ScanIntervalHours
+}
+
+func discoverValidationErrors(discover *Discover) []string {
+	if discover == nil {
+		return nil
+	}
+	var errs []string
+	if len(discover.ScanRoots) == 0 {
+		errs = append(errs, "discover.scan_roots is required")
+	}
+	for _, root := range discover.ScanRoots {
+		if !filepath.IsAbs(root) {
+			errs = append(errs, fmt.Sprintf("discover.scan_root must be an absolute path: %q", root))
+		}
+	}
+	if len(discover.FolderNames) == 0 {
+		errs = append(errs, "discover.folder_names is required")
+	}
+	for _, name := range discover.FolderNames {
+		if name == "" || strings.ContainsAny(name, `/\\`) {
+			errs = append(errs, fmt.Sprintf("discover.folder_name must be a single non-empty path component: %q", name))
+		}
+	}
+
+	fi, err := filter.NewFilter(nil)
+	if err != nil {
+		return append(errs, fmt.Sprintf("creating discover exclude filter: %v", err))
+	}
+	for _, pattern := range discover.ExcludeGlobs {
+		if err := fi.Add(false, pattern); err != nil {
+			errs = append(errs, fmt.Sprintf("invalid discover.exclude_glob %q: %v", pattern, err))
+		}
+	}
+	return errs
 }
 
 // ResolvedExcludes returns the combined global and project exclude patterns.
