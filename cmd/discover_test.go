@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -142,6 +143,11 @@ func TestRunDiscoverNeverAddsMatchingScanRoot(t *testing.T) {
 }
 
 func TestRunDiscoverAppliesDistinctNestedNames(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		// rclone names bisync state files after both full paths; macOS's long
+		// default temp dir pushes the combined name past the 255-byte limit.
+		t.Setenv("TMPDIR", "/tmp")
+	}
 	root := t.TempDir()
 	setTestHome(t, root)
 	scanRoot := filepath.Join(root, "scan")

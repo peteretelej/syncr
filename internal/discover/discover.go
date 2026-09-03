@@ -98,7 +98,9 @@ func Scan(cfg *config.Config) ([]Candidate, ScanCoverage, []string, error) {
 			if entry.Type()&os.ModeSymlink != 0 {
 				if target, err := filepath.EvalSymlinks(current); err != nil {
 					warnings = append(warnings, fmt.Sprintf("cannot resolve symlink %s: %v", current, err))
-				} else if isWithin(target, current) {
+				} else if resolvedDir, derr := filepath.EvalSymlinks(filepath.Dir(current)); derr != nil {
+					warnings = append(warnings, fmt.Sprintf("cannot resolve symlink %s: %v", current, derr))
+				} else if isWithin(target, filepath.Join(resolvedDir, filepath.Base(current))) {
 					warnings = append(warnings, fmt.Sprintf("symlink loop skipped: %s", current))
 				}
 				return nil

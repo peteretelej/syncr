@@ -160,6 +160,7 @@ syncr ships and tests on Linux, macOS, and Windows. CI runs all three; `scripts/
 - **Failure injection**: `chmod 0` does not make paths unreadable under Windows ACLs, and symlink creation/loops need privileges and resolve differently on Windows. Guard such tests with `runtime.GOOS` checks or `t.Skip` with the reason documented.
 - **Permissions**: modes like `0644`/`0755` are mostly no-ops on Windows; never assert permission bits cross-platform.
 - **Names**: Windows reserves device names (`CON`, `PRN`, `AUX`, `NUL`, `COM1`-`COM9`) and is case-insensitive; avoid fixtures relying on case-only distinctions.
+- **Bisync state files**: rclone derives bisync listing/lock filenames from the full path1+path2 strings with no length cap. Tests doing real bisync must keep roots short (on macOS, redirect `TMPDIR` before `t.TempDir()`); long real-world paths can hit the 255-byte filename limit, which is a known product edge.
 - After pushing changes touching filesystem, paths, env, or process behavior, check the CI run for all three OSes before considering the change done.
 
 ## File Locations
